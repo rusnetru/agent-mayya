@@ -1,0 +1,8 @@
+[project]
+name = "next-gen-agent"
+version = "0.1.0"
+description = "Next Generation AI Agent - persistent memory, hierarchical subagents, self-evolving goal/loop architecture"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
