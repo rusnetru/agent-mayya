@@ -14,17 +14,25 @@
 
 ## Быстрый старт
 
+Развёртывание — через git-клон, не через отдельный `.exe`. Это даёт встроенный путь обновления: `git pull` подтягивает новый код без переустановки.
+
 ```powershell
 git clone https://github.com/rusnetru/next-gen-agent.git
 cd next-gen-agent
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m pytest -q     # проверить, что всё работает
-python src/main.py      # запустить агента
+.\install.ps1            # venv + зависимости
+.\.venv\Scripts\python.exe -m pytest -q   # проверить, что всё работает
+.\.venv\Scripts\python.exe src\main.py    # запустить агента
 ```
 
-Полная инструкция по развёртыванию (разработка + сборка Windows .exe) — [docs/04_deployment.md](docs/04_deployment.md).
+Обновление до последней версии:
+
+```powershell
+.\update.ps1
+```
+
+`update.ps1` делает `git pull --ff-only` и переустанавливает зависимости, если изменился `requirements.txt`; отказывается обновлять поверх незакоммиченных локальных правок. Та же логика доступна агенту программно — `src/update/self_update.py` (агент может сам проверять и подтягивать обновления своего кода).
+
+Полная инструкция, включая опциональную сборку Windows `.exe`, — [docs/04_deployment.md](docs/04_deployment.md).
 
 ## Структура репозитория
 
@@ -49,9 +57,12 @@ next-gen-agent/
 │   ├── observability/             # трейсинг действий, dashboard-снимок состояния
 │   ├── safety/                    # memory safety guard, human-in-the-loop, self-modification limits
 │   ├── scalability/                # async-исполнение субагентов
+│   ├── update/                     # git-based self-update (Phase deploy)
 │   └── tools/                     # интеграции инструментов (MCP и др.)
 ├── tests/
-├── build.ps1                      # сборка Windows-исполняемого файла (PyInstaller)
+├── install.ps1                    # первичная установка: venv + зависимости
+├── update.ps1                     # обновление: git pull + переустановка зависимостей при необходимости
+├── build.ps1                      # опционально: сборка Windows .exe (PyInstaller)
 ├── requirements.txt
 └── pyproject.toml
 ```
@@ -70,13 +81,13 @@ next-gen-agent/
 Модули памяти, оркестратора, целей/планирования и эволюции реализованы и протестированы, но пока не связаны в единый end-to-end сценарий, а субагенты — детерминированные заглушки без реальных вызовов LLM.
 Подробности — в [docs/00_progress_log.md](docs/00_progress_log.md).
 
-## Сборка под Windows
+## Сборка отдельного .exe (опционально, не основной путь)
+
+Для случаев, когда на целевой машине принципиально не ставить Python/git:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install pyinstaller
 .\build.ps1
 ```
 
-Результат — исполняемый файл `dist\next-gen-agent.exe`. Подробнее, включая развёртывание на машине без Python, — [docs/04_deployment.md](docs/04_deployment.md).
+Результат — `dist\next-gen-agent.exe`. У такого файла нет обновления через git — для обновления его нужно пересобирать заново. Штатный путь развёртывания и обновления — git-клон, см. выше и [docs/04_deployment.md](docs/04_deployment.md).
