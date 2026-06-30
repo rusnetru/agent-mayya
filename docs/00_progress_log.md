@@ -14,7 +14,7 @@
 | Фаза 0: Фундамент | ✅ Завершена | `db2e386`, `e7aeeae`, `7cafb0d` |
 | Фаза 1: Память | ✅ Завершена | `d59ed2a` |
 | Фаза 2: Иерархия субагентов | ✅ Завершена | `bb06d76` |
-| Фаза 3: Goal/Loop архитектура | ⬜ Не начата | — |
+| Фаза 3: Goal/Loop архитектура | ✅ Завершена | `<TBD>` |
 | Фаза 4: Эволюция и самосовершенствование | ⬜ Не начата | — |
 | Фаза 5: Производственная готовность | ⬜ Не начата | — |
 
@@ -115,12 +115,46 @@ memory.forget(cutoff_timestamp)
 
 ---
 
+## Фаза 3: Goal/Loop архитектура — ✅ Завершена
+
+**Цель:** автоматическое планирование и самокоррекция.
+
+### 3.1 Goal Management System (`src/goals/goal_stack.py`)
+- Иерархия целей с горизонтами `long_term → mid_term → task → action`
+- `GoalStack.decompose()` — автоматическая декомпозиция на один горизонт глубже
+- `GoalStack.revise()` — пересмотр описания/активности цели при изменении контекста
+- `active_leaves()` — какие именно цели сейчас актуальны для работы (без активных детей)
+
+### 3.2 Planning Engine (`src/planning/engine.py`)
+- Базовый: `react_with_self_critique()` — ReAct-цикл с self-critique (Reflexion-style), ретраи с фидбеком до прохождения критики или исчерпания бюджета попыток
+- Расширенный: `mcts_select_action()` — упрощённый MCTS (UCB1, симуляции с наградой) для выбора действия среди вариантов (LATS-inspired)
+- Мета: `StrategyRegistry` — учёт успешности стратегий по классам задач, выбор лучшей стратегии на основе истории (TodoEvolve-inspired); для неизвестного класса задачи — нейтральный приоритет (50/50)
+
+### 3.3 Task-Decoupled Execution (`src/tasks/task_graph.py`)
+- `TaskGraph` — план («что делать») отделён от исполнения («как делать сейчас» — передаётся вызывающей стороной в `run_ready(execute)`)
+- Персистентность в SQLite — незавершённые задачи переживают перезапуск процесса (аналогично `EpisodicMemory`)
+- DAG: зависимости между задачами (`depends_on`), `ready_tasks()` возвращает независимые ветки, пригодные для параллельного исполнения
+
+### 3.4 Self-Correction Loops (`src/loops/self_correction.py`)
+- `inner_loop(act, verify, max_retries)` — per-action: действие → проверка → повтор
+- `outer_loop(run_episode, reflect, strategies)` — per-task: эпизод → рефлексия → смена стратегии при неудаче
+- `meta_loop(consolidate, evolve)` — долгосрочный: консолидация опыта → развитие способностей
+- Все три — универсальные драйверы над callable-аргументами, не привязаны к конкретной реализации Orchestrator/Memory/Planning Engine
+
+### Результат
+- Новые директории: `src/goals/`, `src/planning/`, `src/tasks/`, `src/loops/`
+- Новые тесты: `test_goal_stack.py`, `test_planning_engine.py`, `test_task_graph.py`, `test_self_correction_loops.py`
+- 49/49 тестов проходят (21 новый)
+
+---
+
 ## Известные технические заметки
 
 - В исходном файле `token github.txt` на Desktop был обнаружен GitHub PAT в открытом виде — он не коммитился в репозиторий. Рекомендация: отозвать и сгенерировать новый токен.
-- `*.db` (включая `memory.db`) исключены через `.gitignore` — персистентная память не попадает в git.
+- `*.db` (включая `memory.db`, `tasks.db`) исключены через `.gitignore` — персистентные данные не попадают в git.
 - Subagents в Фазе 2 — детерминированные заглушки (без вызовов LLM), чтобы оркестрация (декомпозиция, маршрутизация, коммуникация) тестировалась без сети. Подключение реального Claude API внутрь `act()` — следующий технический шаг, не меняющий контракт `Orchestrator`.
+- Goal Stack, Planning Engine, Task Graph и Self-Correction Loops в Фазе 3 реализованы как независимые модули — ещё не связаны друг с другом и с Orchestrator/Memory в единый цикл агента. Интеграция в общий `Agent`/`Orchestrator` — следующий технический шаг при переходе к реальному end-to-end сценарию.
 
 ## Следующий шаг
 
-Фаза 3: Goal/Loop архитектура — Goal Management System, Planning Engine (ReAct + self-critique), task-decoupled execution, self-correction loops (inner/outer/meta).
+Фаза 4: Эволюция и самосовершенствование — Skill Evolution Engine, Strategy Adaptation, Team Composition Learning.
