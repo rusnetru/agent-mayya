@@ -195,7 +195,7 @@ memory.forget(cutoff_timestamp)
 - Новые директории: `src/observability/`, `src/safety/`, `src/scalability/`
 - Новые тесты: `test_observability.py`, `test_safety.py`, `test_async_execution.py`
 - 70/70 тестов проходят (12 новых)
-- Windows-сборка (`build.ps1`, PyInstaller) запущена для проверки на актуальном коде — статус будет зафиксирован отдельно
+- Windows-сборка проверена: `python -m PyInstaller --onefile --name next-gen-agent src/main.py` собрал рабочий `dist\next-gen-agent.exe` (~231 МБ, тянет torch/onnxruntime через chromadb), запуск подтверждён — exe выполнил agent loop (`[stub action] respond to: hello`) и создал персистентную `memory.db` рядом с собой
 
 ---
 
@@ -206,6 +206,7 @@ memory.forget(cutoff_timestamp)
 - Subagents в Фазе 2 — детерминированные заглушки (без вызовов LLM), чтобы оркестрация (декомпозиция, маршрутизация, коммуникация) тестировалась без сети. Подключение реального Claude API внутрь `act()` — следующий технический шаг, не меняющий контракт `Orchestrator`.
 - Goal Stack, Planning Engine, Task Graph, Self-Correction Loops (Фаза 3), весь Evolution-слой (Фаза 4) и весь Observability/Safety/Scalability-слой (Фаза 5) реализованы как независимые модули поверх Memory/Orchestrator — ещё не связаны друг с другом в единый end-to-end цикл агента.
 - Subagents всё ещё детерминированные заглушки — реальный вызов Claude API внутрь `Subagent.act()` не реализован.
+- `dist\next-gen-agent.exe` весит ~231 МБ — PyInstaller затягивает в onefile-бандл весь транзитивный вес `chromadb` (включая `torch`, `onnxruntime`), хотя текущий код фактически использует только собственный `vector_index.py`. При необходимости компактной сборки: явно исключить неиспользуемые тяжёлые пакеты через `--exclude-module` в `build.ps1`, либо отложить `chromadb` в requirements до момента реальной интеграции embedding-модели.
 
 ## Следующий шаг
 
