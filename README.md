@@ -1,6 +1,6 @@
 # Mayya — автономный AI-агент
 
-[![tests](https://img.shields.io/badge/tests-87%2F87-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-101%2F101-brightgreen)]()
 [![python](https://img.shields.io/badge/python-3.11+-blue)]()
 [![llm](https://img.shields.io/badge/LLM-DeepSeek-6366f1)]()
 
@@ -32,7 +32,8 @@ python src/main.py
 
 | Возможность | Как работает |
 |-------------|-------------|
-| Веб-поиск | DuckDuckGo (без API-ключа) |
+| Веб-поиск | DuckDuckGo (без API-ключа), два endpoint'а с fallback |
+| Чтение страниц | web_extract — загрузка и текст любой страницы |
 | Файлы | Чтение, запись, список директорий |
 | Python | Выполнение кода в subprocess |
 | Память | 4 уровня: working → episodic → semantic → procedural |
@@ -41,23 +42,32 @@ python src/main.py
 
 ## Архитектура
 
+Два пути выполнения:
+
 ```
-run() → TaskGraph (SQLite) → Orchestrator (LLM-декомпозиция)
-  → inner_loop (retry) → [Researcher | Executor | Verifier]
-  → outer_loop (reflect) → meta_loop (consolidate + evolve)
-  → close() → semantic_graph.json
+Диалог (основной путь):
+  ConversationalAgent — живой agent loop:
+    история сообщений → recall памяти → LLM ↔ инструменты (до 12 шагов) → ответ
+    → эпизод сохраняется в память
+
+Сложные задачи (/task):
+  run() → TaskGraph (SQLite) → Orchestrator (LLM-декомпозиция)
+    → inner_loop (retry) → [Researcher | Executor | Verifier]
+    → outer_loop (reflect) → meta_loop (consolidate + evolve)
+    → close() → semantic_graph.json
 ```
 
 - **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
 - **LLM:** DeepSeek (`deepseek-chat`)
 - **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
-- **Тесты:** 87/87 (pytest)
+- **Тесты:** 101/101 (pytest)
 
 ## Команды в интерфейсе
 
 | Команда | Действие |
 |---------|----------|
-| любое сообщение | Mayya отвечает |
+| любое сообщение | Живой диалог с инструментами и памятью |
+| `/task <задача>` | Прогнать задачу через оркестратор (subagent-команда) |
 | `/help` | Справка |
 | `/status` | Память и сессия |
 | `exit` / `Ctrl+C` | Выход с сохранением |

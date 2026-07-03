@@ -15,6 +15,7 @@ from rich.spinner import Spinner
 from rich.text import Text
 from rich import box
 
+from src.agent.conversational import ConversationalAgent
 from src.agent.end_to_end import EndToEndAgent
 
 LOGO = r"""
@@ -72,23 +73,21 @@ def _extract_reply(transcript: list[str]) -> str:
 
 
 def run_task(agent: EndToEndAgent, task: str) -> None:
+    """Main dialog path: conversational agent loop (tools + memory).
+    Falls back to the orchestrator pipeline when no LLM is configured."""
     global last_task, last_reply
-    transcript_lines: list[str] = []
-
-    if chat_history:
-        context = "История диалога:\n" + "\n".join(chat_history[-6:]) + f"\n\nНовое сообщение: {task}"
-    else:
-        context = task
 
     with Live(Spinner("dots", text="[cyan]...[/]"), refresh_per_second=10, console=console):
         try:
-            result = agent.run(context)
-            transcript_lines = result.orchestration.get("transcript", [])
+            if conv_ref is not None:
+                reply = conv_ref.chat(task)
+            else:
+                result = agent.run(task)
+                reply = _extract_reply(result.orchestration.get("transcript", []))
         except Exception as e:
             console.print(f"[red]ERROR: {e}[/]")
             return
 
-    reply = _extract_reply(transcript_lines)
     last_task = task
     if reply:
         chat_history.append(f"User: {task}")
@@ -97,6 +96,31 @@ def run_task(agent: EndToEndAgent, task: str) -> None:
         console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
     else:
         console.print("[dim](no response)[/]")
+
+
+def run_pipeline_task(agent: EndToEndAgent, task: str) -> None:
+    """Explicit orchestrator path (/task): decompose → subagent team → verify."""
+    global last_task, last_reply
+    with Live(Spinner("dots", text="[cyan]orchestrating...[/]"), refresh_per_second=10, console=console):
+        try:
+            result = agent.run(task)
+        except Exception as e:
+            console.print(f"[red]ERROR: {e}[/]")
+            return
+
+    transcript = result.orchestration.get("transcript", [])
+    reply = _extract_reply(transcript) or "\n".join(transcript[-3:])
+    last_task = task
+    if reply:
+        chat_history.append(f"User: {task}")
+        chat_history.append(f"Mayya: {reply}")
+        last_reply = reply
+    status = "[green]verified[/]" if result.succeeded else "[yellow]not verified[/]"
+    console.print(Panel(
+        reply or "(no output)",
+        title=f"[bold white]Mayya · pipeline · {status}[/]",
+        border_style="cyan",
+    ))
 
 
 # ── SLASH COMMANDS ──────────────────────────────────────────
@@ -112,6 +136,7 @@ def cmd_help() -> None:
         "\n[bold]Инструменты[/]\n"
         "  [cyan]/tools[/]           Список инструментов\n"
         "  [cyan]/model [name][/]    Показать/сменить модель\n"
+        "  [cyan]/task <задача>[/]   Прогнать задачу через оркестратор (subagent-команда)\n"
         "\n[bold]Утилиты[/]\n"
         "  [cyan]/save[/]            Сохранить диалог в файл\n"
         "  [cyan]/copy[/]            Скопировать последний ответ в буфер\n"
@@ -132,6 +157,8 @@ def cmd_new() -> None:
     global chat_history, session_title
     chat_history.clear()
     session_title = ""
+    if conv_ref is not None:
+        conv_ref.reset()
     console.print("[yellow]Новая сессия. Контекст сброшен.[/]")
 
 
@@ -219,6 +246,7 @@ def cmd_tools() -> None:
     console.print(Panel(
         "[bold]Доступные инструменты[/]\n\n"
         "  [cyan]web_search[/]   Поиск в интернете (DuckDuckGo)\n"
+        "  [cyan]web_extract[/]  Загрузка и чтение веб-страницы\n"
         "  [cyan]read_file[/]    Чтение файла\n"
         "  [cyan]write_file[/]   Запись в файл\n"
         "  [cyan]list_dir[/]     Список файлов в директории\n"
@@ -240,17 +268,21 @@ def cmd_model(args: str, agent: EndToEndAgent) -> None:
 # ── GLOBALS FOR COMMANDS ────────────────────────────────────
 
 agent_ref: EndToEndAgent = None  # type: ignore[assignment]
+conv_ref: ConversationalAgent | None = None
 model_ref: str = ""
 
 
 def main() -> None:
-    global agent_ref, model_ref
+    global agent_ref, conv_ref, model_ref
     load_dotenv()
     use_llm = bool(os.environ.get("DEEPSEEK_API_KEY"))
 
     agent = EndToEndAgent(use_llm=use_llm)
     agent_ref = agent
-    model = agent.orchestrator._llm.model if agent.orchestrator._llm else "stubs (offline)"
+    client = agent.orchestrator._llm
+    if client is not None:
+        conv_ref = ConversationalAgent(client, memory=agent.memory)
+    model = client.model if client else "stubs (offline)"
     model_ref = model
     print_header(agent, model)
 
@@ -265,7 +297,7 @@ def main() -> None:
             "• Выполнять код на Python\n"
             "• Помнить контекст диалога\n"
             "• Самообучаться на успешных задачах\n\n"
-            "[dim]87 тестов · DeepSeek · 4-уровневая память[/]",
+            "[dim]101 тест · DeepSeek · 4-уровневая память[/]",
             title="[bold white]Mayya[/]",
             border_style="cyan"
         ))
@@ -313,6 +345,11 @@ def main() -> None:
                 cmd_tools()
             elif name == "/model":
                 cmd_model(args, agent)
+            elif name == "/task":
+                if args.strip():
+                    run_pipeline_task(agent, args.strip())
+                else:
+                    console.print("[dim]Использование: /task <задача>[/]")
             else:
                 run_task(agent, task)
 

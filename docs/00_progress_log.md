@@ -403,3 +403,31 @@ memory.forget(cutoff_timestamp)
 - Изменены: `src/agent/end_to_end.py` (+TaskGraph, +run_session, +close), `src/main.py` (graceful shutdown)
 - 87/87 тестов проходят
 - Интеграционные тесты: TaskGraph persistence, run_session, close → meta loop
+
+---
+
+## Фаза 11: Живой диалог — ConversationalAgent — Завершена (Claude Fable 5)
+
+**Цель:** убрать «деревянность» — каждое сообщение шло через task-pipeline (decompose → routing → subagent на фрагмент → verifier → retry), терялся контекст, диалог был медленным и пассивным.
+
+Дата: 2026-07-03 | Исполнитель: Claude Fable 5
+
+### 11.1 Найденная корневая причина «пустого DuckDuckGo»
+
+Ссылки в выдаче DDG — redirect-URL вида `//duckduckgo.com/l/?uddg=<encoded>`, а парсер отбрасывал всё, что не начинается с `http` → почти всегда пустой результат. Это была не «проблема бесплатного поиска», а баг парсера.
+
+### 11.2 Изменения
+
+- `src/tools/web_search.py` — переписан: декодирование uddg-редиректов, POST на html.duckduckgo.com + fallback на lite.duckduckgo.com, приведение max_results к int
+- `src/tools/registry.py` — настоящие JSON-схемы (типы integer/string, необязательные параметры), приведение типов и фильтрация лишних аргументов в Tool.run
+- `src/tools/web_extract.py` — html.unescape в regex-fallback
+- `src/agent/conversational.py` — **новый ConversationalAgent**: живой agent loop — настоящая история сообщений, все инструменты (до 12 итераций), recall эпизодической памяти в system prompt, запись диалога в память
+- `src/main.py` — диалог идёт через ConversationalAgent; оркестратор доступен явно через `/task`; `/new` сбрасывает историю агента
+- `src/llm/personality.py` — переписан MAYYA_IDENTITY: живой характер, правило «2-3 попытки при ошибке инструмента, потом честно скажи», запрет кода-заглушек
+- `src/llm/subagent.py` — сабагенты видят результаты друг друга (context.history() в user message) — фикс проблемы №3 из отчёта Hermes
+
+### 11.3 Результат
+
+- 101/101 тестов (было 87, +14: test_conversational_agent.py, test_web_search.py)
+- Живой smoke-тест на реальном DeepSeek: запомнила имя, реально нашла в интернете и объяснила MCP, вспомнила имя из памяти, вычислила Фибоначчи через python_exec
+- Закрыты проблемы 1 (DDG), 2 (код при ошибке поиска), 3 (потеря контекста между сабагентами) из отчёта Hermes

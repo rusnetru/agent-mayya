@@ -79,9 +79,16 @@ class LLMSubagent(Subagent):
         tools = self._ensure_tools()
         schemas = self._get_tool_schemas()
 
+        # Share what earlier subagents produced — otherwise executor answers
+        # a bare subtask fragment with no idea what researcher already found.
+        prior = "\n".join(context.history()[-4:])
+        user_content = task if not prior else (
+            f"{task}\n\nРезультаты других агентов по этой задаче:\n{prior}"
+        )
+
         messages: list[dict] = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": task},
+            {"role": "user", "content": user_content},
         ]
 
         for _step in range(5):  # max 5 tool-calling iterations

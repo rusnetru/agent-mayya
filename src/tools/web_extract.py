@@ -2,6 +2,7 @@
 # Использует urllib для загрузки страниц + html2text для конвертации в Markdown
 # Если html2text нет — отдаёт plain text через regex
 
+import html as _html
 import json
 import re
 import urllib.request
@@ -22,6 +23,7 @@ def _html_to_text(html: str, max_chars: int = 8000) -> str:
         text = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r"<style[^>]*>.*?</style>", "", text, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r"<[^>]+>", " ", text)
+        text = _html.unescape(text)
         text = re.sub(r"\s+", " ", text)
 
     return text.strip()[:max_chars]
