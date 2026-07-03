@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-reasoner"
+DEFAULT_MODEL = "deepseek-chat"
 
 
 class LLMClient:
