@@ -11,7 +11,7 @@
 ## Быстрый старт
 
 ```bash
-git clone https://github.com/rusnetru/next-gen-agent.git
+git clone https://github.com/rusnetru/agent-mayya.git
 cd next-gen-agent
 powershell .\install.ps1
 ```
