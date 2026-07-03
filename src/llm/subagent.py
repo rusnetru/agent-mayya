@@ -13,7 +13,15 @@ from src.orchestrator.subagents import MemoryCurator, Subagent
 
 _SYSTEM_PROMPTS = {
     "researcher": (
-        MAYYA_IDENTITY + "\n\nТы — исследователь. Найди информацию по задаче и дай чёткий ответ."
+        MAYYA_IDENTITY + "\n\nТы — исследователь Mayya. Твоя задача: найти информацию по запросу пользователя.\n"
+        "У тебя есть ИНСТРУМЕНТЫ:\n"
+        "- web_search(query) — поиск в интернете (DuckDuckGo)\n"
+        "- web_extract(url) — загрузить и прочитать содержимое страницы\n\n"
+        "ПОРЯДОК ДЕЙСТВИЙ:\n"
+        "1. Сначала вызови web_search по запросу\n"
+        "2. Найди релевантный результат и вызови web_extract с его URL\n"
+        "3. Проанализируй содержимое страницы и дай краткий ответ\n\n"
+        "ВАЖНО: не пиши «я не могу переходить по ссылкам» — ты МОЖЕШЬ, используй web_extract."
     ),
     "executor": (
         MAYYA_IDENTITY + "\n\nТы — исполнитель. Отвечай текстом, как в обычном диалоге. "
@@ -32,12 +40,96 @@ class LLMSubagent(Subagent):
         self.role = role
         self.client = client
         self.context_key = context_key
+        self._tools: dict | None = None
+
+    def _ensure_tools(self) -> dict:
+        if self._tools is None:
+            from src.tools.registry import REGISTRY
+            self._tools = REGISTRY
+        return self._tools
+
+    def _get_tool_schemas(self) -> list[dict]:
+        """Return OpenAI-compatible tool schemas for researcher."""
+        from src.tools.registry import get_tool_schemas
+        return get_tool_schemas()
 
     def act(self, task: str, context: SharedContext) -> str:
         system_prompt = _SYSTEM_PROMPTS.get(self.role, f"You are the {self.role} subagent.")
+
+        # For researcher: try tool-calling loop first (web_search → web_extract → analyse)
+        if self.role == "researcher":
+            return self._act_with_tools(task, context, system_prompt)
+
+        # For other roles: plain text completion
         result = self.client.complete(system_prompt, task)
         context.set(self.context_key, result)
         return result
+
+    def _act_with_tools(self, task: str, context: SharedContext, system_prompt: str) -> str:
+        """Agent loop: LLM decides which tools to call, executes them, repeats until done."""
+        import json as _json
+
+        tools = self._ensure_tools()
+        schemas = self._get_tool_schemas()
+
+        messages: list[dict] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task},
+        ]
+
+        for _step in range(5):  # max 5 tool-calling iterations
+            resp = self.client.complete_with_tools(
+                system_prompt="",  # already in messages
+                user_message="",   # already in messages
+                tools=schemas,
+            )
+
+            # If model returned text without tool calls — done
+            if not resp.get("tool_calls"):
+                result = resp.get("content", "")
+                context.set(self.context_key, result)
+                return result
+
+            # Execute tool calls
+            for tc in resp["tool_calls"]:
+                tool_name = tc["name"]
+                try:
+                    args = _json.loads(tc["arguments"])
+                except _json.JSONDecodeError:
+                    args = {}
+
+                if tool_name in tools:
+                    try:
+                        tool_result = tools[tool_name].run(**args)
+                    except Exception as e:
+                        tool_result = f"Error: {e}"
+                else:
+                    tool_result = f"Unknown tool: {tool_name}"
+
+                # Add assistant message with tool call
+                messages.append({
+                    "role": "assistant",
+                    "content": resp.get("content") or "",
+                    "tool_calls": [{
+                        "id": tc["id"],
+                        "type": "function",
+                        "function": {"name": tool_name, "arguments": tc["arguments"]},
+                    }],
+                })
+                # Add tool result
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": tool_result,
+                })
+
+        # Fallback: after max steps, ask for final answer
+        fallback = self.client.complete(
+            system_prompt + "\n\nДай итоговый ответ на основе найденной информации. Будь краток.",
+            _json.dumps(messages[-6:], ensure_ascii=False),
+        )
+        context.set(self.context_key, fallback)
+        return fallback
 
 
 class LLMVerifier(Subagent):

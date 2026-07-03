@@ -5,6 +5,7 @@ from typing import Any, Callable
 from src.tools.file_tools import list_dir, read_file, write_file
 from src.tools.python_exec import python_exec
 from src.tools.web_search import web_search
+from src.tools.web_extract import web_extract
 
 ToolFn = Callable[..., str]
 
@@ -32,6 +33,12 @@ REGISTRY: dict[str, Tool] = {
         description="Search the web using DuckDuckGo. Returns JSON with results: title, url, snippet.",
         fn=web_search,
         parameters={"query": "search query string", "max_results": "number of results (default 5)"},
+    ),
+    "web_extract": Tool(
+        name="web_extract",
+        description="Fetch a web page and return its text content. Use after web_search to read found pages. Returns JSON.",
+        fn=web_extract,
+        parameters={"url": "page URL to fetch", "max_chars": "max characters (default 8000)"},
     ),
     "read_file": Tool(
         name="read_file",

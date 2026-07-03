@@ -43,3 +43,34 @@ class LLMClient:
             ],
         )
         return response.choices[0].message.content or ""
+
+    def complete_with_tools(
+        self,
+        system_prompt: str,
+        user_message: str,
+        tools: list[dict],
+        temperature: float = 0.3,
+    ) -> dict:
+        """Send a request with function-calling tools. Returns dict with 'content' and optional 'tool_calls'."""
+        response = self._client.chat.completions.create(
+            model=self.model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            tools=tools,
+            tool_choice="auto",
+        )
+        msg = response.choices[0].message
+        result: dict = {"content": msg.content or ""}
+        if msg.tool_calls:
+            result["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                }
+                for tc in msg.tool_calls
+            ]
+        return result

@@ -25,8 +25,48 @@ class Subagent(ABC):
 class Researcher(Subagent):
     role = "researcher"
 
+    def __init__(self, llm_client=None) -> None:
+        self._llm = llm_client
+        self._tools: dict | None = None
+
+    def _ensure_tools(self) -> dict:
+        if self._tools is None:
+            from src.tools.registry import REGISTRY
+            self._tools = REGISTRY
+        return self._tools
+
     def act(self, task: str, context: SharedContext) -> str:
-        finding = f"research findings on: {task}"
+        """Real research: search web, fetch top pages, return findings."""
+        tools = self._ensure_tools()
+        findings_parts: list[str] = []
+
+        # Step 1: search the web
+        try:
+            search_result = tools["web_search"].run(query=task, max_results=3)
+            import json as _json
+            search_data = _json.loads(search_result)
+            if search_data.get("success") and search_data.get("results"):
+                findings_parts.append(f"Результаты поиска по запросу «{task}»:")
+                for i, r in enumerate(search_data["results"][:3], 1):
+                    findings_parts.append(f"  {i}. {r['title']}\n     {r['url']}\n     {r.get('snippet', '')[:200]}")
+            else:
+                findings_parts.append(f"Поиск по «{task}» не дал результатов.")
+        except Exception as e:
+            findings_parts.append(f"Ошибка поиска: {e}")
+
+        # Step 2: fetch top result page
+        try:
+            if search_data.get("results"):
+                top_url = search_data["results"][0]["url"]
+                extract_result = tools["web_extract"].run(url=top_url, max_chars=5000)
+                extract_data = _json.loads(extract_result)
+                if extract_data.get("success"):
+                    findings_parts.append(f"\n--- Содержимое {top_url} ---")
+                    findings_parts.append(extract_data["content"])
+        except Exception:
+            pass  # extraction is best-effort
+
+        finding = "\n".join(findings_parts)
         context.set("research", finding)
         return finding
 
