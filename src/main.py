@@ -15,14 +15,13 @@ from rich import box
 from src.agent.end_to_end import EndToEndAgent
 
 LOGO = r"""
-╔╗ ╔╗                           ╔╗
-║╚╗║║                           ║║
-║╔╝║╚═╗╔══╗ ╔╗ ╔╗╔══╗╔═╗ ╔══╗ ║║
-║║ ║╔╗║║╔╗║ ║║ ║║║╔╗║║╔╗╗║╔╗║ ╚╝
-║╚╗║║║║║╚╝║ ║╚╗║║║╚╝║║║║║║╚╝║ ╔╗
-╚╝ ╚╝╚╝╚══╝ ╚╝ ╚╝╚══╝╚╝╚╝╚══╝ ╚╝
+ __  __
+|  \/  |__ _ _  _ _  _ __ _
+| |\/| / _` | || | || / _` |
+|_|  |_\__,_|\_, |\_, \__,_|
+             |__/ |__/
 """
-TAGLINE = "autonomous agent · deepseek · 87 tests · 12 phases · mayya"
+TAGLINE = "autonomous agent · deepseek · 87 tests · 12 phases"
 
 console = Console()
 
