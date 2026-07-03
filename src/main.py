@@ -14,15 +14,15 @@ from rich import box
 
 from src.agent.end_to_end import EndToEndAgent
 
-LOGO = """
-╔╗ ╔═══╗╔═══╗╔╗ ╔╗   ╔═══╗╔═══╗╔╗╔╗╔╗
-║║ ║╔══╝║╔══╝║╚═╝║   ║╔══╝║╔═╗║║║║║║║
-║║ ║╚══╗║╚══╗║╔╗ ║   ║║╔═╗║╚═╝║║║║║║║
-║║ ║╔══╝║╔══╝║║╚╗║   ║║╚╗║║╔╗╔╝║╚╝╚╝║
-║╚═╣╚══╗║╚══╗║║ ║║   ║╚═╝║║║║╚╗╚╗╔╗╔╝
-╚══╝╚══╝╚═══╝╚╝ ╚╝   ╚═══╝╚╝╚═╝ ╚╝╚╝
+LOGO = r"""
+╔╗ ╔╗                           ╔╗
+║╚╗║║                           ║║
+║╔╝║╚═╗╔══╗ ╔╗ ╔╗╔══╗╔═╗ ╔══╗ ║║
+║║ ║╔╗║║╔╗║ ║║ ║║║╔╗║║╔╗╗║╔╗║ ╚╝
+║╚╗║║║║║╚╝║ ║╚╗║║║╚╝║║║║║║╚╝║ ╔╗
+╚╝ ╚╝╚╝╚══╝ ╚╝ ╚╝╚══╝╚╝╚╝╚══╝ ╚╝
 """
-TAGLINE = "autonomous agent · deepseek · 87 tests · 12 phases"
+TAGLINE = "autonomous agent · deepseek · 87 tests · 12 phases · mayya"
 
 console = Console()
 
@@ -46,7 +46,7 @@ def print_header(agent: EndToEndAgent, use_llm: bool) -> None:
 
     # Status panel
     status = build_status_table(use_llm, agent.memory.episodic.count())
-    console.print(Panel(status, title="[bold]Status[/]", border_style="blue"))
+    console.print(Panel(status, title="[bold]Mayya[/]", border_style="blue"))
 
     # Soul.md indicator
     soul_path = "soul.md"
