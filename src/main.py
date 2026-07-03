@@ -28,22 +28,22 @@ console = Console()
 chat_history: list[str] = []
 
 
-def build_status_table(use_llm: bool, memory_size: int) -> Table:
+def build_status_table(client_model: str, memory_size: int) -> Table:
     t = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
     t.add_column(style="dim")
     t.add_column(style="bold cyan")
-    t.add_row("LLM", "DeepSeek (deepseek-chat)" if use_llm else "stubs (offline)")
+    t.add_row("LLM", client_model)
     t.add_row("Memory", f"{memory_size} episodes")
     t.add_row("Tools", "web_search · file R/W · python_exec")
     t.add_row("Session", time.strftime("%Y-%m-%d %H:%M"))
     return t
 
 
-def print_header(agent: EndToEndAgent, use_llm: bool) -> None:
+def print_header(agent: EndToEndAgent, model: str) -> None:
     console.print(LOGO, style="bold cyan", highlight=False)
     console.print(f"  {TAGLINE}", style="dim italic")
     console.print()
-    status = build_status_table(use_llm, agent.memory.episodic.count())
+    status = build_status_table(model, agent.memory.episodic.count())
     console.print(Panel(status, title="[bold]Mayya[/]", border_style="blue"))
     soul_path = "soul.md"
     if os.path.isfile(soul_path):
@@ -94,7 +94,8 @@ def main() -> None:
     use_llm = bool(os.environ.get("DEEPSEEK_API_KEY"))
 
     agent = EndToEndAgent(use_llm=use_llm)
-    print_header(agent, use_llm)
+    model = agent.orchestrator._llm.model if agent.orchestrator._llm else "stubs (offline)"
+    print_header(agent, model)
 
     console.print("[dim]Type a message, or[/] [bold]/help[/] [dim]·[/] [bold]exit[/]\n")
 
