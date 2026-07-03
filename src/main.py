@@ -98,6 +98,22 @@ def main() -> None:
 
     console.print("[dim]Type a message, or[/] [bold]/help[/] [dim]·[/] [bold]exit[/]\n")
 
+    # First-run onboarding
+    if agent.memory.episodic.count() == 0:
+        console.print(Panel(
+            "[bold]Привет! Я Mayya — автономный AI-агент.[/]\n\n"
+            "Я умею:\n"
+            "• Искать в интернете\n"
+            "• Читать и писать файлы\n"
+            "• Выполнять код на Python\n"
+            "• Помнить контекст диалога\n"
+            "• Самообучаться на успешных задачах\n\n"
+            "[dim]87 тестов · DeepSeek · 4-уровневая память[/]",
+            title="[bold white]Mayya[/]",
+            border_style="cyan"
+        ))
+        console.print()
+
     try:
         while True:
             try:

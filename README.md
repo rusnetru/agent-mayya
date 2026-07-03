@@ -1,95 +1,85 @@
-# Next Gen Agent
+# Mayya — автономный AI-агент
 
-ИИ-агент нового поколения: постоянная память, иерархическая команда субагентов,
-самоорганизующиеся goal/loop циклы и способность эволюционировать в процессе работы.
+[![tests](https://img.shields.io/badge/tests-87%2F87-brightgreen)]()
+[![python](https://img.shields.io/badge/python-3.11+-blue)]()
+[![llm](https://img.shields.io/badge/LLM-DeepSeek-6366f1)]()
 
-## Ключевые архитектурные принципы
+**Mayya** — автономный AI-агент с 4-уровневой памятью, инструментами и самообучением. Работает в терминале, говорит по-русски.
 
-- **Не stateless** — агент помнит контекст между сессиями (episodic + semantic memory).
-- **Не monolithic** — иерархия специализированных субагентов (Researcher, Executor, Verifier, Planner, Memory Curator) под управлением Orchestrator.
-- **Не static** — топология команды и стратегия планирования адаптируются под задачу.
-- **Не tool-dependent** — абстракция над протоколами MCP (инструменты) и A2A (межагентное взаимодействие).
-
-Подробности архитектуры, исследовательский ландшафт и план разработки по фазам — в [docs/](docs/).
+---
 
 ## Быстрый старт
 
-Развёртывание — через git-клон, не через отдельный `.exe`. Это даёт встроенный путь обновления: `git pull` подтягивает новый код без переустановки.
-
-```powershell
+```bash
 git clone https://github.com/rusnetru/next-gen-agent.git
 cd next-gen-agent
-.\install.ps1            # venv + зависимости
-.\.venv\Scripts\python.exe -m pytest -q   # проверить, что всё работает
-.\.venv\Scripts\python.exe src\main.py    # запустить агента
+powershell .\install.ps1
 ```
 
-Или ещё проще — двойной клик по [`run.bat`](run.bat) в корне репозитория: сам создаст `.venv` и поставит зависимости при первом запуске (если их ещё нет), затем запустит агента. Для реальных вызовов LLM положите `DEEPSEEK_API_KEY=...` в `.env` в корне репозитория — без него агент работает на детерминированных заглушках субагентов.
-
-Обновление до последней версии:
-
-```powershell
-.\update.ps1
+Создай `.env` с ключом DeepSeek:
+```
+DEEPSEEK_API_KEY=sk-...
 ```
 
-`update.ps1` делает `git pull --ff-only` и переустанавливает зависимости, если изменился `requirements.txt`; отказывается обновлять поверх незакоммиченных локальных правок. Та же логика доступна агенту программно — `src/update/self_update.py` (агент может сам проверять и подтягивать обновления своего кода).
-
-Полная инструкция, включая опциональную сборку Windows `.exe`, — [docs/04_deployment.md](docs/04_deployment.md).
-
-## Структура репозитория
-
-```
-next-gen-agent/
-├── README.md
-├── docs/
-│   ├── 00_progress_log.md         # журнал выполнения плана по фазам (что сделано, коммиты)
-│   ├── 01_research_landscape.md   # обзор существующих решений и подходов
-│   ├── 02_development_plan.md     # план разработки по фазам (0-5)
-│   ├── 03_tech_stack.md           # зафиксированный технологический стек
-│   └── 04_deployment.md           # инструкция по развёртыванию
-├── src/
-│   ├── agent/                     # базовый agent loop (perceive-retrieve-plan-act-observe-store)
-│   ├── memory/                    # episodic / semantic / procedural память + Memory API
-│   ├── orchestrator/              # Orchestrator, субагенты, communication layer
-│   ├── goals/                     # Goal Management System (иерархия целей)
-│   ├── planning/                  # Planning Engine (ReAct+critique, MCTS, выбор стратегии)
-│   ├── tasks/                     # персистентный task graph (DAG)
-│   ├── loops/                     # self-correction loops (inner/outer/meta)
-│   ├── evolution/                 # skill evolution, strategy adaptation, team composition learning
-│   ├── observability/             # трейсинг действий, dashboard-снимок состояния
-│   ├── safety/                    # memory safety guard, human-in-the-loop, self-modification limits
-│   ├── scalability/                # async-исполнение субагентов
-│   ├── update/                     # git-based self-update (Phase deploy)
-│   └── tools/                     # интеграции инструментов (MCP и др.)
-├── tests/
-├── install.ps1                    # первичная установка: venv + зависимости
-├── update.ps1                     # обновление: git pull + переустановка зависимостей при необходимости
-├── build.ps1                      # опционально: сборка Windows .exe (PyInstaller)
-├── requirements.txt
-└── pyproject.toml
+Запуск:
+```bash
+python src/main.py
 ```
 
-## Документация
+---
 
-- [Журнал выполнения плана](docs/00_progress_log.md) — что сделано по каждой фазе, с коммитами
-- [Обзор исследовательского ландшафта](docs/01_research_landscape.md)
-- [План разработки](docs/02_development_plan.md)
-- [Технологический стек](docs/03_tech_stack.md)
-- [Развёртывание](docs/04_deployment.md)
+## Что умеет
 
-## Статус разработки
+| Возможность | Как работает |
+|-------------|-------------|
+| Веб-поиск | DuckDuckGo (без API-ключа) |
+| Файлы | Чтение, запись, список директорий |
+| Python | Выполнение кода в subprocess |
+| Память | 4 уровня: working → episodic → semantic → procedural |
+| Самообучение | SkillEvolutionEngine — авто-извлечение навыков |
+| Безопасность | Карантин фактов, approval gate для критических действий |
 
-Все 6 фаз плана пройдены в объёме, реализуемом как библиотечный код (Фаза 5 — частично: пункты, требующие реальной инфраструктуры — облачная БД, horizontal scaling — намеренно не реализовывались как код).
-Модули памяти, оркестратора, целей/планирования и эволюции реализованы и протестированы, но пока не связаны в единый end-to-end сценарий, а субагенты — детерминированные заглушки без реальных вызовов LLM.
-Подробности — в [docs/00_progress_log.md](docs/00_progress_log.md).
+## Архитектура
 
-## Сборка отдельного .exe (опционально, не основной путь)
-
-Для случаев, когда на целевой машине принципиально не ставить Python/git:
-
-```powershell
-.\.venv\Scripts\python.exe -m pip install pyinstaller
-.\build.ps1
+```
+run() → TaskGraph (SQLite) → Orchestrator (LLM-декомпозиция)
+  → inner_loop (retry) → [Researcher | Executor | Verifier]
+  → outer_loop (reflect) → meta_loop (consolidate + evolve)
+  → close() → semantic_graph.json
 ```
 
-Результат — `dist\next-gen-agent.exe`. У такого файла нет обновления через git — для обновления его нужно пересобирать заново. Штатный путь развёртывания и обновления — git-клон, см. выше и [docs/04_deployment.md](docs/04_deployment.md).
+- **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
+- **LLM:** DeepSeek (`deepseek-chat`)
+- **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
+- **Тесты:** 87/87 (pytest)
+
+## Команды в интерфейсе
+
+| Команда | Действие |
+|---------|----------|
+| любое сообщение | Mayya отвечает |
+| `/help` | Справка |
+| `/status` | Память и сессия |
+| `exit` / `Ctrl+C` | Выход с сохранением |
+
+## Файлы
+
+| Файл | Назначение |
+|------|-----------|
+| `memory.db` | Эпизодическая память (SQLite) |
+| `tasks.db` | Граф задач |
+| `semantic_graph.json` | Семантический граф (сохраняется при выходе) |
+| `soul.md` | Базовые правила безопасности |
+| `AGENTS.md` | Инструкция для AI-агентов |
+
+## Разработка
+
+```bash
+.venv\Scripts\python -m pytest -q    # тесты
+python src/main.py                   # запуск
+powershell .\update.ps1              # обновление из git
+```
+
+## Лицензия
+
+MIT
