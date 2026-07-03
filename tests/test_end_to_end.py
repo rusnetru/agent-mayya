@@ -41,7 +41,7 @@ def test_run_uses_llm_subagents_when_use_llm_true():
                 return "ok done"
             return "PASS"
 
-        def complete_with_tools(self, system_prompt="", user_message="", tools=None, temperature=0.3):
+        def complete_with_tools(self, system_prompt="", user_message="", tools=None, temperature=0.3, messages=None):
             return {"content": self.complete(system_prompt, user_message, temperature)}
 
     memory = Memory(db_path=":memory:")

@@ -12,7 +12,7 @@ class FakeLLMClient:
         self.calls.append((system_prompt, user_message))
         return self._responses.pop(0) if self._responses else "ok"
 
-    def complete_with_tools(self, system_prompt: str, user_message: str, tools: list[dict], temperature: float = 0.3) -> dict:
+    def complete_with_tools(self, system_prompt: str, user_message: str, tools: list[dict], temperature: float = 0.3, messages=None) -> dict:
         # Return text without tool calls — researcher falls through to final answer
         return {"content": self.complete(system_prompt, user_message, temperature)}
 

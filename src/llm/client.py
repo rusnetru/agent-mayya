@@ -50,15 +50,23 @@ class LLMClient:
         user_message: str,
         tools: list[dict],
         temperature: float = 0.3,
+        messages: list[dict] | None = None,
     ) -> dict:
-        """Send a request with function-calling tools. Returns dict with 'content' and optional 'tool_calls'."""
+        """Send a request with function-calling tools. Returns dict with 'content' and optional 'tool_calls'.
+        
+        If messages is provided, it's used directly (system_prompt/user_message are ignored).
+        """
+        if messages:
+            msgs = messages
+        else:
+            msgs = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
         response = self._client.chat.completions.create(
             model=self.model,
             temperature=temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
+            messages=msgs,
             tools=tools,
             tool_choice="auto",
         )

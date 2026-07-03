@@ -86,9 +86,10 @@ class LLMSubagent(Subagent):
 
         for _step in range(5):  # max 5 tool-calling iterations
             resp = self.client.complete_with_tools(
-                system_prompt="",  # already in messages
-                user_message="",   # already in messages
+                system_prompt="",
+                user_message="",
                 tools=schemas,
+                messages=messages,
             )
 
             # If model returned text without tool calls — done
