@@ -14,13 +14,23 @@ from src.orchestrator.subagents import Executor, MemoryCurator, Planner, Researc
 Pattern = Literal["sequential", "parallel", "hierarchical"]
 
 _ROUTING_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "researcher": ("research", "find", "investigate", "search"),
-    "verifier": ("verify", "check", "validate"),
+    "researcher": (
+        "research", "find", "investigate", "search",
+        "найди", "исследуй", "поиск", "узнай", "разберись",
+    ),
+    "executor": (
+        "execute", "run", "do", "perform", "write", "create", "tell", "say",
+        "сделай", "напиши", "расскажи", "представься", "опиши", "покажи", "выполни",
+    ),
+    "verifier": (
+        "verify", "check", "validate", "test",
+        "проверь", "валидируй", "протестируй",
+    ),
 }
 _ROUTING_SYSTEM_PROMPT = (
-    "You are a task router. Given a subtask, pick the best subagent role. "
-    "Valid roles: researcher, executor, verifier, planner, memory_curator. "
-    "Reply with exactly one word — the role name."
+    "You route subtasks to agents. Pick one role: researcher, executor, verifier, planner. "
+    "Default: executor for most tasks. Planner ONLY for explicit 'plan/decompose' requests. "
+    "Reply with one word — the role name."
 )
 
 

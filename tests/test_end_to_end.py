@@ -36,7 +36,10 @@ def test_run_uses_llm_subagents_when_use_llm_true():
 
     class FakeLLMClient:
         def complete(self, system_prompt, user_message, temperature=0.3):
-            return "PASS" if "verifier" in system_prompt.lower() else "ok done"
+            # Verifier prompt is the only one without role keywords
+            if any(w in system_prompt.lower() for w in ("research", "researcher", "executor", "planner", "route", "router")):
+                return "ok done"
+            return "PASS"
 
     memory = Memory(db_path=":memory:")
     agent = EndToEndAgent(memory=memory, use_llm=True, llm_client=FakeLLMClient())
