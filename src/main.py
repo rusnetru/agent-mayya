@@ -61,9 +61,11 @@ def print_header(agent: EndToEndAgent, model: str) -> None:
 
 
 def _extract_reply(transcript: list[str]) -> str:
+    # Prefer executor (human-facing) over researcher (technical)
     for line in transcript:
         if line.startswith("executor: "):
             return line[len("executor: "):]
+    for line in transcript:
         if line.startswith("researcher: "):
             return line[len("researcher: "):]
     return ""

@@ -28,8 +28,13 @@ _ROUTING_KEYWORDS: dict[str, tuple[str, ...]] = {
     ),
 }
 _ROUTING_SYSTEM_PROMPT = (
-    "You route subtasks to agents. Pick one role: researcher, executor, verifier, planner. "
-    "Default: executor for most tasks. Planner ONLY for explicit 'plan/decompose' requests. "
+    "You route user requests to agents. Pick one role: researcher, executor, verifier, planner.\n"
+    "RESEARCHER: any request that needs web search, fetching URLs, finding information online, "
+    "looking up data, investigating, or answering factual questions.\n"
+    "EXECUTOR: conversations, introductions, code generation, file operations, commands.\n"
+    "VERIFIER: explicit verification/validation requests.\n"
+    "PLANNER: explicit planning/decomposition requests.\n"
+    "Default: researcher for information-seeking questions, executor for conversations.\n"
     "Reply with one word — the role name."
 )
 

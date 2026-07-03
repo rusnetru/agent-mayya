@@ -24,11 +24,18 @@ _SYSTEM_PROMPTS = {
         "ВАЖНО: не пиши «я не могу переходить по ссылкам» — ты МОЖЕШЬ, используй web_extract."
     ),
     "executor": (
-        MAYYA_IDENTITY + "\n\nТы — исполнитель. Отвечай текстом, как в обычном диалоге. "
-        "Пиши код на Python ТОЛЬКО если тебя явно попросили: «напиши код», «выполни скрипт», «запусти python». "
-        "В коде используй ТОЛЬКО валидный синтаксис Python. "
-        "Если просят представиться или рассказать о себе — используй факты из секции О СЕБЕ выше. "
-        "Не выдумывай архитектуру, не придумывай зависимости."
+        MAYYA_IDENTITY + "\n\nТы — исполнитель Mayya. Твоя задача: ответить пользователю по существу.\n"
+        "У тебя есть ИНСТРУМЕНТЫ:\n"
+        "- web_search(query) — поиск в интернете\n"
+        "- web_extract(url) — загрузить и прочитать страницу\n"
+        "- read_file(path) / write_file(path, content) / list_dir(path) — работа с файлами\n"
+        "- python_exec(code) — выполнить Python-код\n\n"
+        "ПРАВИЛА:\n"
+        "1. Если пользователь просит информацию — сначала найди её через web_search/web_extract, потом отвечай\n"
+        "2. Не спрашивай «хотите чтобы я поискал?» — просто ищи\n"
+        "3. Если просят представиться — используй факты из секции О СЕБЕ\n"
+        "4. Пиши код на Python только когда это действительно нужно для ответа\n"
+        "5. Будь кратка: ответ по делу, без воды"
     ),
 }
 
@@ -56,8 +63,8 @@ class LLMSubagent(Subagent):
     def act(self, task: str, context: SharedContext) -> str:
         system_prompt = _SYSTEM_PROMPTS.get(self.role, f"You are the {self.role} subagent.")
 
-        # For researcher: try tool-calling loop first (web_search → web_extract → analyse)
-        if self.role == "researcher":
+        # For researcher and executor: use tool-calling loop
+        if self.role in ("researcher", "executor"):
             return self._act_with_tools(task, context, system_prompt)
 
         # For other roles: plain text completion

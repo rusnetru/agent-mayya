@@ -137,7 +137,8 @@ class Planner(Subagent):
         return f"plan: {subtasks}"
 
     def decompose(self, task: str) -> list[str]:
-        parts = [p.strip() for p in task.split(" and ") if p.strip()]
+        import re
+        parts = [p.strip() for p in re.split(r"\s+and\s+|\s+и\s+", task) if p.strip()]
         return parts or [task]
 
 
