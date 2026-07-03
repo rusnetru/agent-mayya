@@ -17,18 +17,19 @@ _ROUTING_KEYWORDS: dict[str, tuple[str, ...]] = {
     "researcher": ("research", "find", "investigate", "search"),
     "verifier": ("verify", "check", "validate"),
 }
+_ROUTING_SYSTEM_PROMPT = (
+    "You are a task router. Given a subtask, pick the best subagent role. "
+    "Valid roles: researcher, executor, verifier, planner, memory_curator. "
+    "Reply with exactly one word — the role name."
+)
 
 
 class Orchestrator:
-    """Builds an ad-hoc subagent team per task instead of a fixed pipeline.
+    """Builds an ad-hoc subagent team per task instead of a fixed pipeline."""
 
-    The agent pool is a registry (`self.pool`), so callers can add/remove
-    subagent types at runtime (`register`/`unregister`) — topology is not
-    fixed at construction time.
-    """
-
-    def __init__(self, memory: Memory | None = None) -> None:
+    def __init__(self, memory: Memory | None = None, llm_client=None) -> None:
         self.memory = memory or Memory(db_path=":memory:")
+        self._llm = llm_client
         self.pool: dict[str, Subagent] = {
             "researcher": Researcher(),
             "executor": Executor(),
@@ -48,7 +49,14 @@ class Orchestrator:
         return planner.decompose(task)
 
     def route(self, subtask: str) -> str:
-        """Dynamic topology: pick the agent role best suited to a subtask."""
+        """Pick best subagent role: LLM-driven when client available, keyword fallback."""
+        if self._llm is not None:
+            try:
+                role = self._llm.complete(_ROUTING_SYSTEM_PROMPT, subtask).strip().lower()
+                if role in self.pool:
+                    return role
+            except Exception:
+                pass  # fall through to keyword match
         lowered = subtask.lower()
         for role, keywords in _ROUTING_KEYWORDS.items():
             if any(keyword in lowered for keyword in keywords):

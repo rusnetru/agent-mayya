@@ -26,12 +26,15 @@ class Memory:
         db_path: str | Path = "memory.db",
         working_capacity: int = 20,
         consolidate_every: int = 5,
+        safety_guard=None,
+        vector_index=None,
     ) -> None:
         self.working = WorkingMemory(capacity=working_capacity)
-        self.episodic = EpisodicMemory(db_path=db_path)
+        self.episodic = EpisodicMemory(db_path=db_path, vector_index=vector_index)
         self.semantic = SemanticGraph()
         self.skills = SkillStore()
         self.consolidate_every = consolidate_every
+        self._guard = safety_guard  # MemorySafetyGuard | None
 
     def store(
         self,
@@ -44,11 +47,17 @@ class Memory:
     ) -> Episode:
         self.working.add(event)
         if type == "semantic":
-            self.semantic.add_fact(event, context or {})
+            self._add_semantic_fact(event, context or {})
         episode = self.episodic.store(event, context, who=who, where=where, why=why)
         if self.consolidate_every and self.episodic.count() % self.consolidate_every == 0:
             self.consolidate()
         return episode
+
+    def _add_semantic_fact(self, fact: str, metadata: dict[str, Any]) -> bool:
+        if self._guard is not None:
+            return self._guard.propose_fact(fact, metadata)
+        self.semantic.add_fact(fact, metadata)
+        return True
 
     def forget(self, cutoff_timestamp: float) -> int:
         """Evict episodic memories older than cutoff_timestamp. Returns count evicted."""
@@ -76,8 +85,9 @@ class Memory:
             seen[episode.content] = seen.get(episode.content, 0) + 1
         for content, count in seen.items():
             if count >= 2 and not self.semantic.has_fact(content):
-                self.semantic.add_fact(content, {"source": "consolidation", "frequency": count})
-                promoted += 1
+                meta = {"source": "consolidation", "frequency": count}
+                if self._add_semantic_fact(content, meta):
+                    promoted += 1
         return promoted
 
     def skill_extract(self, episode_index: int) -> Skill | None:

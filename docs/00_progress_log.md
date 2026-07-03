@@ -261,4 +261,145 @@ memory.forget(cutoff_timestamp)
 2. Заменить упрощённый MCTS (`src/planning/engine.py`) на более полноценную реализацию с деревом и backpropagation
 3. Маршрутизация субагентов (`Orchestrator.route()`) — перевести с keyword-matching на LLM-роутинг
 4. Подключить реальную инфраструктуру для оставшихся пунктов Фазы 5.3 (cloud vector DB, horizontal scaling) при появлении production-окружения
-5. Наполнить `src/tools/` реальными интеграциями инструментов (сейчас пусто)
+
+---
+
+## Фаза 7: MVP-запуск — ✅ Завершена (Hermes Agent)
+
+**Цель:** дать агенту практическую применимость — инструменты, интерфейс, персистентность.
+
+Дата: 2026-07-03 | Исполнитель: Hermes Agent (DeepSeek)
+
+### 7.1 Инструменты (`src/tools/`)
+
+Реализован базовый набор из 5 инструментов:
+
+| Инструмент | Файл | Что делает |
+|---|---|---|
+| `web_search` | `web_search.py` | Поиск через DuckDuckGo HTML (без API-ключа) |
+| `read_file` | `file_tools.py` | Чтение текстовых файлов |
+| `write_file` | `file_tools.py` | Запись в файл (создаёт родительские директории) |
+| `list_dir` | `file_tools.py` | Список файлов/папок |
+| `python_exec` | `python_exec.py` | Выполнение Python-кода в subprocess |
+
+Все инструменты возвращают JSON. Реестр — `src/tools/registry.py` с поддержкой OpenAI function calling схем.
+
+### 7.2 Интеграция инструментов в Executor
+
+`Executor.act()` (`src/orchestrator/subagents.py`) парсит строку задачи как `tool_name(key=value, ...)` и вызывает соответствующий инструмент. Fallback — прежнее generic-исполнение. Это позволяет Orchestrator'у делегировать реальные действия без изменения контракта.
+
+### 7.3 CLI-интерфейс
+
+`src/main.py` переписан: интерактивный цикл `while True: input("> ")`, запуск `EndToEndAgent.run(task)` для каждой команды, вывод статуса и транскрипта. Выход по `exit`/`quit`/`q`/`Ctrl+C`.
+
+### 7.4 Персистентность семантической памяти
+
+- `src/memory/json_store.py` — save/load NetworkX DiGraph в JSON
+- `SemanticGraph.save(path)` / `SemanticGraph.load(path)` — методы класса
+- Факты и связи (включая `supersedes`) сохраняются между перезапусками
+
+### Результат
+
+- Новые файлы: `src/tools/web_search.py`, `src/tools/file_tools.py`, `src/tools/python_exec.py`, `src/tools/registry.py`, `src/memory/json_store.py`
+- Изменены: `src/main.py` (CLI), `src/orchestrator/subagents.py` (Executor с инструментами), `src/memory/semantic.py` (save/load)
+- 87/87 тестов проходят
+- Smoke-test инструментов пройден
+
+---
+
+## Фаза 8: LLM-интеллект — ✅ Завершена (Hermes Agent)
+
+**Цель:** заменить наивные заглушки на LLM-управляемую декомпозицию и маршрутизацию.
+
+Дата: 2026-07-03 | Исполнитель: Hermes Agent (DeepSeek)
+
+### 8.1 LLM-декомпозиция задач (`LLMPlanner`)
+
+- Новый класс `LLMPlanner` в `src/llm/subagent.py`
+- Модель получает задачу и возвращает JSON-массив подзадач
+- При ошибке (сеть, плохой JSON) — fallback на наивный `split(" and ")`
+- `build_llm_subagent_pool()` теперь использует `LLMPlanner` вместо детерминированного `Planner`
+
+### 8.2 LLM-маршрутизация субагентов
+
+- `Orchestrator` получает опциональный `llm_client` в конструктор
+- `route()` при наличии клиента спрашивает модель: «какая роль лучше подходит?»
+- Ответ валидируется: роль должна быть в `self.pool`
+- При ошибке/отсутствии клиента — fallback на keyword matching
+
+### 8.3 Интеграция в EndToEndAgent
+
+- `EndToEndAgent` создаёт `LLMClient` до `Orchestrator` и передаёт его
+- Клиент используется и для пула субагентов, и для маршрутизации
+
+### Результат
+
+- Изменены: `src/llm/subagent.py` (+`LLMPlanner`, −`Planner` import), `src/orchestrator/orchestrator.py` (+`llm_client`, +LLM routing), `src/agent/end_to_end.py` (проводка клиента)
+- 87/87 тестов проходят
+## Фаза 9: Safety guards — ✅ Завершена (Hermes Agent)
+
+**Цель:** подключить три защитных механизма Фазы 5.2 в основной цикл.
+
+Дата: 2026-07-03 | Исполнитель: Hermes Agent (DeepSeek)
+
+### 9.1 MemorySafetyGuard → Memory API
+
+- `Memory.__init__()` принимает опциональный `safety_guard`
+- `_add_semantic_fact()` — единая точка входа: если guard есть → `propose_fact()`, иначе прямой `add_fact()`
+- `store(type="semantic")` и `consolidate()` проходят через guard
+- Факты с confidence < 0.4 или противоречащие существующим → карантин
+
+### 9.2 HumanApprovalGate → EndToEndAgent
+
+- `CRITICAL_ACTIONS`: `delete_memory`, `modify_system_prompt`, `self_update`, `execute_untrusted_code`
+- `EndToEndAgent.approval_gate` — критические действия требуют approve/reject
+
+### 9.3 SelfModificationPolicy → EndToEndAgent
+
+- `SELF_MOD_ALLOWED_KEYS`: `max_retries`, `temperature`, `consolidate_every`, `working_capacity`
+- Попытка изменить неразрешённый ключ → `PermissionError`
+
+### Результат
+
+- Изменены: `src/memory/api.py` (+safety_guard, +_add_semantic_fact), `src/agent/end_to_end.py` (+MemorySafetyGuard, +HumanApprovalGate, +SelfModificationPolicy)
+- 87/87 тестов проходят
+- Интеграционные тесты: карантин, release, approval gate, self-mod policy
+
+---
+
+## Фаза 10: Task Graph + outer/meta loop — ✅ Завершена (Hermes Agent)
+
+**Цель:** замкнуть агентский цикл — персистентность задач между сессиями, рефлексия между эпизодами, эволюция в конце сессии.
+
+Дата: 2026-07-03 | Исполнитель: Hermes Agent (DeepSeek)
+
+### 10.1 Task Graph → EndToEndAgent
+
+- `EndToEndAgent` создаёт `TaskGraph(db_path="tasks.db")` — SQLite-персистентность
+- `run()`: задача добавляется в граф, статус обновляется на `done`/`failed`
+- Незавершённые задачи переживают перезапуск процесса
+
+### 10.2 Outer loop → `run_session()`
+
+- `run_session(tasks)` — пакетный запуск нескольких задач
+- При неудаче — рефлексия и смена стратегии исполнения (sequential → parallel → hierarchical)
+- До 3 попыток на сессию
+
+### 10.3 Meta loop → `close()`
+
+- `close()` вызывается при завершении сессии:
+  - `consolidate()` — episodic → semantic
+  - `SkillEvolutionEngine.extract_from_successful_episodes()` — авто-извлечение навыков
+  - `auto_combine_sequential_pairs()` — сборка составных навыков
+  - `semantic.save("semantic_graph.json")` — персистентность графа
+  - Закрытие `TaskGraph` и `Memory`
+
+### 10.4 CLI: graceful shutdown
+
+- `main.py`: `try/finally` с вызовом `agent.close()` при выходе (exit, Ctrl+C, EOF)
+
+### Результат
+
+- Изменены: `src/agent/end_to_end.py` (+TaskGraph, +run_session, +close), `src/main.py` (graceful shutdown)
+- 87/87 тестов проходят
+- Интеграционные тесты: TaskGraph persistence, run_session, close → meta loop

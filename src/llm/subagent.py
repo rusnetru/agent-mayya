@@ -8,7 +8,7 @@ from __future__ import annotations
 from src.llm.client import LLMClient
 from src.memory.api import Memory
 from src.orchestrator.communication import SharedContext
-from src.orchestrator.subagents import MemoryCurator, Planner, Subagent
+from src.orchestrator.subagents import MemoryCurator, Subagent
 
 _SYSTEM_PROMPTS = {
     "researcher": (
@@ -61,13 +61,47 @@ class LLMVerifier(Subagent):
 
 
 def build_llm_subagent_pool(client: LLMClient, memory: Memory) -> dict[str, Subagent]:
-    """Researcher/Executor/Verifier go through the LLM; Planner/MemoryCurator stay
-    deterministic — decomposition and memory bookkeeping don't need a model call.
+    """Researcher/Executor/Verifier/Planner go through the LLM; MemoryCurator stays
+    deterministic — memory bookkeeping doesn't need a model call.
     """
     return {
         "researcher": LLMSubagent("researcher", client, context_key="research"),
         "executor": LLMSubagent("executor", client, context_key="execution_result"),
         "verifier": LLMVerifier(client),
-        "planner": Planner(),
+        "planner": LLMPlanner(client),
         "memory_curator": MemoryCurator(memory),
     }
+
+
+class LLMPlanner(Subagent):
+    """LLM-driven Planner: decomposes a task into subtasks via the model."""
+
+    role = "planner"
+
+    _SYSTEM_PROMPT = (
+        "You are a task planner. Given a task, break it into 2-5 concrete subtasks. "
+        "Return ONLY a JSON array of strings, nothing else. "
+        'Example: ["research competitor pricing", "write summary report"].'
+    )
+
+    def __init__(self, client: LLMClient) -> None:
+        self.client = client
+
+    def act(self, task: str, context: SharedContext) -> str:
+        subtasks = self.decompose(task)
+        context.set("subtasks", subtasks)
+        return f"plan: {subtasks}"
+
+    def decompose(self, task: str) -> list[str]:
+        import json as _json
+
+        try:
+            raw = self.client.complete(self._SYSTEM_PROMPT, task)
+            parts = _json.loads(raw)
+            if isinstance(parts, list) and all(isinstance(p, str) for p in parts):
+                return [p for p in parts if p.strip()]
+        except Exception:
+            pass
+        # Fallback: naive split
+        parts = [p.strip() for p in task.split(" and ") if p.strip()]
+        return parts or [task]

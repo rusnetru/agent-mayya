@@ -53,3 +53,18 @@ class SemanticGraph:
             current = successors[0]
             chain.append(current)
         return chain
+
+    def save(self, path: str) -> None:
+        """Persist semantic graph to a JSON file."""
+        from src.memory.json_store import save_graph_to_json
+
+        save_graph_to_json(self._graph, path)
+
+    def load(self, path: str) -> None:
+        """Load semantic graph from a JSON file (merges into existing graph)."""
+        from src.memory.json_store import load_graph_from_json
+
+        loaded = load_graph_from_json(path)
+        self._graph = nx.compose(self._graph, loaded)
+        for node in loaded.nodes:
+            self._versions[node] = loaded.nodes[node].get("version", 1)

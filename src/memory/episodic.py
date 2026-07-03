@@ -31,7 +31,7 @@ class Episode:
 class EpisodicMemory:
     """Persists episodes to a SQLite file. Pass db_path=":memory:" for ephemeral use (tests)."""
 
-    def __init__(self, db_path: str | Path = "memory.db") -> None:
+    def __init__(self, db_path: str | Path = "memory.db", vector_index=None) -> None:
         self._db_path = str(db_path)
         self._conn = sqlite3.connect(self._db_path)
         self._conn.execute(
@@ -48,7 +48,7 @@ class EpisodicMemory:
             """
         )
         self._conn.commit()
-        self._vector_index = VectorIndex()
+        self._vector_index = vector_index if vector_index is not None else VectorIndex()
         for episode in self.all():
             self._vector_index.add(episode.id, episode.content)
 

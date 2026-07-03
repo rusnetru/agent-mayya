@@ -34,10 +34,48 @@ class Researcher(Subagent):
 class Executor(Subagent):
     role = "executor"
 
+    def __init__(self) -> None:
+        self._tools: dict | None = None
+
+    def _ensure_tools(self) -> dict:
+        if self._tools is None:
+            from src.tools.registry import REGISTRY
+            self._tools = REGISTRY
+        return self._tools
+
     def act(self, task: str, context: SharedContext) -> str:
+        # Try to parse task as a tool call: "tool_name(arg1=val1, ...)"
+        tool_name, args = self._parse_tool_call(task)
+        if tool_name and tool_name in self._ensure_tools():
+            try:
+                result = self._ensure_tools()[tool_name].run(**args)
+                context.set("execution_result", result)
+                return result
+            except Exception as e:
+                error = f"tool error [{tool_name}]: {e}"
+                context.set("execution_result", error)
+                return error
+
+        # Fallback: generic execution
         result = f"executed: {task}"
         context.set("execution_result", result)
         return result
+
+    @staticmethod
+    def _parse_tool_call(task: str) -> tuple[str | None, dict]:
+        """Parse 'tool_name(key=value, ...)' from task string."""
+        import re
+        m = re.match(r"(\w+)\((.*)\)", task.strip())
+        if not m:
+            return None, {}
+        tool_name = m.group(1)
+        args_str = m.group(2)
+        args = {}
+        for pair in re.findall(r"(\w+)=([\"'].*?[\"']|\S+)", args_str):
+            key, val = pair
+            val = val.strip("\"'")
+            args[key] = val
+        return tool_name, args
 
 
 class Verifier(Subagent):

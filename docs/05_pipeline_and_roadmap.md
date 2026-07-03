@@ -75,76 +75,47 @@ EndToEndAgent.run(task, task_class)
 |---|---|---|
 | Goal Stack | `src/goals/goal_stack.py` | Интегрирован в EndToEndAgent |
 | Planning Engine (ReAct+critique, MCTS, StrategyRegistry) | `src/planning/engine.py` | StrategyRegistry используется; ReAct/MCTS — не задействованы в main-цикле |
-| Task Graph (DAG, SQLite) | `src/tasks/task_graph.py` | Реализован, в main-цикл не встроен |
-| Self-Correction (inner/outer/meta loop) | `src/loops/self_correction.py` | `inner_loop` используется в EndToEndAgent; outer/meta — не задействованы |
-| Skill Evolution Engine | `src/evolution/skill_evolution.py` | Реализован, в main-цикл не встроен |
-| Team Composition Learning | `src/evolution/team_composition.py` | Реализован, в main-цикл не встроен |
+| Task Graph (DAG, SQLite) | `src/tasks/task_graph.py` | ✅ Интегрирован (Фаза 10): persist в EndToEndAgent |
+| Self-Correction (inner/outer/meta loop) | `src/loops/self_correction.py` | ✅ Интегрированы (Фаза 10): inner+outer+meta в EndToEndAgent |
+| Skill Evolution Engine | `src/evolution/skill_evolution.py` | ✅ Интегрирован (Фаза 10): meta loop → close() |
+| Team Composition Learning | `src/evolution/team_composition.py` | ✅ Интегрирован (Фаза 12): record team + success after each run() |
+| LLM Planner (декомпозиция) | `src/llm/subagent.py` | ✅ LLMPlanner с fallback (Фаза 8) |
+| LLM Routing (маршрутизация) | `src/orchestrator/orchestrator.py` | ✅ LLM-route с fallback на keywords (Фаза 8) |
 | Observability (Tracer, dashboard) | `src/observability/` | Tracer используется в EndToEndAgent; dashboard — вызывается вручную |
-| Safety (MemorySafetyGuard, HumanApprovalGate, SelfModificationPolicy) | `src/safety/` | Реализованы, не встроены в основной цикл |
+| Safety (MemorySafetyGuard, HumanApprovalGate, SelfModificationPolicy) | `src/safety/` | ✅ Интегрированы (Фаза 9): guard в Memory, gate+policy в EndToEndAgent |
 | Async execution | `src/scalability/async_execution.py` | Реализован, в main-цикл не встроен |
+| CLI Interface | `src/main.py` | ✅ Реализован (Фаза 7): интерактивный цикл `while True: input()` |
 | Self-update (git pull) | `src/update/self_update.py` | Реализован, вызывается вручную через `update.ps1` |
-| Tools | `src/tools/` | Пустая директория, не реализовано |
+| Semantic Memory (JSON persistence) | `src/memory/semantic.py` + `json_store.py` | ✅ Реализовано (Фаза 7): save/load через JSON |
+| Tools | `src/tools/` | ✅ Реализованы (Фаза 7): web_search, file R/W, list_dir, python_exec + registry |
 
 ---
 
 ## 2. Следующий план разработки
 
-Приоритеты расставлены от наиболее критичного к менее срочному.
+Приоритеты обновлены 2026-07-03 после Фазы 7.
+
+### Выполнено (Фаза 7-10, Hermes Agent)
+- ✅ Инструменты: web_search, file R/W, list_dir, python_exec + registry
+- ✅ CLI-интерфейс: интерактивный цикл в `main.py`
+- ✅ Semantic memory JSON-персистентность (save/load)
+- ✅ LLM-декомпозиция задач: `LLMPlanner` с fallback на `split(" and ")`
+- ✅ LLM-маршрутизация субагентов: `Orchestrator.route()` с fallback на keywords
+- ✅ Safety guards: MemorySafetyGuard → Memory, HumanApprovalGate + SelfModificationPolicy → EndToEndAgent
+- ✅ ChromaDB: `ChromaVectorIndex` — drop-in замена `VectorIndex`, реальные embeddings
+- ✅ Team Composition Learning: запись состава команды после каждого run()
 
 ---
 
-### Приоритет 1: Замкнуть основной агентный цикл
+### Приоритет 1: Интерфейсы
 
-#### 1.1 LLM-декомпозиция задач в Planner
-**Проблема:** `Planner.decompose()` сейчас режет задачу по подстроке `" and "` — наивно и ненадёжно.  
-**Решение:** подключить `LLMClient` к `Planner.act()`, попросить модель выдать JSON-список подзадач.  
-**Файл:** `src/orchestrator/subagents.py`, `Planner.decompose()`  
-**Объём:** ~30 строк
+#### ✅ ChromaDB — реальные embeddings (Фаза 11)
+`ChromaVectorIndex` — drop-in замена `VectorIndex`, семантический поиск через `all-MiniLM-L6-v2`.
 
-#### 1.2 LLM-маршрутизация субагентов
-**Проблема:** `Orchestrator.route()` выбирает роль по наличию слова ("research", "verify") — пропускает нестандартные формулировки.  
-**Решение:** спросить LLM: "какой из ролей [researcher/executor/verifier] лучше подходит для этой подзадачи?"  
-**Файл:** `src/orchestrator/orchestrator.py`, метод `route()`  
-**Объём:** ~25 строк
-
-#### 1.3 Встроить Task Graph в основной цикл
-**Проблема:** `TaskGraph` (DAG с зависимостями, SQLite-персистентность) реализован, но `EndToEndAgent` его не использует — незавершённые задачи не выживают между сессиями.  
-**Решение:** при старте `EndToEndAgent` загружать из `TaskGraph` незавершённые задачи и продолжать их выполнение.  
-**Файл:** `src/agent/end_to_end.py`  
-**Объём:** ~40 строк
-
-#### 1.4 Встроить outer loop и meta loop
-**Проблема:** реализованы `outer_loop` (смена стратегии между эпизодами) и `meta_loop` (consolidate + evolve), но в main-цикл не встроены.  
-**Решение:** добавить outer loop вокруг запуска задач (несколько задач за сессию, рефлексия между ними) и meta loop при завершении сессии (consolidate episodic → semantic, запустить SkillEvolutionEngine).  
-**Файл:** `src/agent/end_to_end.py`  
-**Объём:** ~50 строк
-
----
-
-### Приоритет 2: Инструменты (сейчас `src/tools/` пустая)
-
-#### 2.1 Базовый набор инструментов
-Без инструментов агент не может ничего сделать кроме текстовых ответов. Минимальный набор:
-
-| Инструмент | Что даёт |
-|---|---|
-| Web Search | Реальный поиск в интернете (SerpAPI / DuckDuckGo) |
-| File Read/Write | Чтение/запись файлов на диске пользователя |
-| Python REPL | Выполнение кода — самый мощный инструмент |
-| HTTP Request | Вызов внешних API |
-
-**Подход:** реализовать как `Tool` с методом `run(params) -> str`, зарегистрировать в `Executor` — он передаёт инструменты модели через function calling DeepSeek API.  
-**Файл:** `src/tools/`, `src/orchestrator/subagents.py` (Executor)  
-**Объём:** ~150 строк
-
----
-
-### Приоритет 3: Персистентность semantic memory
-
-**Проблема:** `SemanticGraph` (NetworkX) хранится только в памяти процесса — consolidated-факты теряются при перезапуске. Только episodic memory переживает перезапуск (SQLite).  
-**Решение варианта A:** сериализовать граф в JSON/pickle при завершении сессии и загружать при старте.  
-**Решение варианта B:** заменить NetworkX на встроенную поддержку SQLite (таблица `facts` + `edges`) — единообразно с эпизодической памятью.  
-**Объём:** ~60 строк
+#### 1.1 Telegram-бот
+**Проблема:** только CLI — нет удалённого доступа.  
+**Решение:** лёгкий Telegram-бот через python-telegram-bot, запускающий EndToEndAgent в каждом сообщении.  
+**Объём:** ~100 строк
 
 ---
 
@@ -153,24 +124,7 @@ EndToEndAgent.run(task, task_class)
 **Проблема:** текущий `VectorIndex` (хешированные bag-of-words) не понимает семантику — "купить машину" и "приобрести автомобиль" не найдутся по запросу "транспорт".  
 **Решение:** реализовать `ChromaVectorIndex` класс, реализующий интерфейс `VectorIndex`, переключить `EpisodicMemory` на него через конфигурацию. ChromaDB уже в `requirements.txt`.  
 **Файл:** `src/memory/vector_index.py`, `src/memory/episodic.py`  
-**Объём:** ~40 строк + первичная загрузка embedding-модели (ChromaDB скачивает автоматически)
-
----
-
-### Приоритет 5: Пользовательский интерфейс
-
-**Проблема:** агент сейчас запускается с хардкоженной задачей в `main.py`. Нет интерактивного диалога.  
-**Решение:** простой CLI-цикл `while True: task = input("> "); agent.run(task)` — минимальный интерактивный режим. Следующий шаг — опциональный Telegram-бот (как у Hermes).  
-**Файл:** `src/main.py`  
-**Объём:** ~20 строк для CLI; ~100 строк для Telegram
-
----
-
-### Приоритет 6: Safety — встроить в основной цикл
-
-**Проблема:** `MemorySafetyGuard` и `HumanApprovalGate` реализованы, но не подключены — агент пишет факты в semantic memory без проверки.  
-**Решение:** завернуть `Memory.consolidate()` через `MemorySafetyGuard.propose_fact()` вместо прямого `semantic.add_fact()`. Добавить `HumanApprovalGate` для действий типа "удалить память" / "изменить системный промпт".  
-**Объём:** ~30 строк
+**Объём:** ~40 строк
 
 ---
 
@@ -236,7 +190,14 @@ next-gen-agent/
 │   │   └── async_execution.py     ← run_async() (asyncio parallel subagents)
 │   ├── update/
 │   │   └── self_update.py         ← git pull self-update API
-│   └── tools/                     ← ПУСТО — следующий приоритет
+│   ├── tools/
+│   │   ├── __init__.py             ← package marker
+│   │   ├── registry.py             ← Tool + REGISTRY + OpenAI function schemas
+│   │   ├── web_search.py           ← DuckDuckGo HTML search (no API key)
+│   │   ├── file_tools.py           ← read_file, write_file, list_dir
+│   │   └── python_exec.py          ← subprocess Python execution
+│   └── memory/
+│       └── json_store.py           ← NetworkX ↔ JSON save/load
 ├── tests/                         ← 87 тестов (pytest)
 └── docs/
     ├── 00_progress_log.md         ← журнал по фазам с коммитами
