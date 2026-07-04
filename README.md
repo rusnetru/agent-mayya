@@ -1,6 +1,6 @@
 # Mayya — автономный AI-агент
 
-[![tests](https://img.shields.io/badge/tests-101%2F101-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-115%2F115-brightgreen)]()
 [![python](https://img.shields.io/badge/python-3.11+-blue)]()
 [![llm](https://img.shields.io/badge/LLM-DeepSeek-6366f1)]()
 
@@ -32,11 +32,13 @@ python src/main.py
 
 | Возможность | Как работает |
 |-------------|-------------|
-| Веб-поиск | DuckDuckGo (без API-ключа), два endpoint'а с fallback |
+| Веб-поиск | Цепочка провайдеров: Serper/Google → Yandex → DuckDuckGo |
 | Чтение страниц | web_extract — загрузка и текст любой страницы |
-| Файлы | Чтение, запись, список директорий |
+| Файлы | Чтение, запись, точечная правка (edit_file), regex-поиск (search_files) |
+| Терминал | run_command — shell-команды (git, pip, скрипты) |
 | Python | Выполнение кода в subprocess |
-| Память | 4 уровня: working → episodic → semantic → procedural |
+| Память | 4 уровня: working → episodic → semantic → procedural + инструмент remember |
+| Навыки | Папка `skills/` со SKILL.md — Mayya читает их сама по задаче |
 | Самообучение | SkillEvolutionEngine — авто-извлечение навыков |
 | Безопасность | Карантин фактов, approval gate для критических действий |
 
@@ -60,7 +62,7 @@ python src/main.py
 - **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
 - **LLM:** DeepSeek (`deepseek-chat`)
 - **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
-- **Тесты:** 101/101 (pytest)
+- **Тесты:** 115/115 (pytest)
 
 ## Команды в интерфейсе
 

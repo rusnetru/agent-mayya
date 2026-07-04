@@ -1,13 +1,17 @@
-# Next Gen Agent — Web Search tool via DuckDuckGo (no API key required)
+# Next Gen Agent — Web Search tool: multi-provider chain (подход перенесён из Hermes web-search-plus)
 #
-# DDG's HTML results wrap every link in a redirect: //duckduckgo.com/l/?uddg=<encoded-url>&rut=...
-# Those must be decoded, otherwise every result gets filtered out and the search
-# looks "empty". Two endpoints are tried: html.duckduckgo.com (POST, richer
-# markup) and lite.duckduckgo.com (GET, simpler markup, rarely rate-limited).
+# Chain: Serper (Google API, ключ) → Yandex Search API (ключ, силён в русском)
+#        → DuckDuckGo html (бесплатный) → DuckDuckGo lite (бесплатный fallback)
+# Providers without an API key in the environment are skipped silently.
+#
+# DDG note: result links are redirects (//duckduckgo.com/l/?uddg=<url>) and must
+# be decoded, otherwise everything gets filtered out and the search looks empty.
 
+import base64
 import urllib.parse
 import urllib.request
 import json
+import os
 import re
 
 _HEADERS = {
@@ -19,33 +23,123 @@ _HEADERS = {
 
 
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web using DuckDuckGo (no API key). Returns JSON."""
+    """Search the web across providers (Serper → Yandex → DuckDuckGo). Returns JSON."""
     try:
         max_results = int(max_results)
     except (TypeError, ValueError):
         max_results = 5
 
     errors: list[str] = []
-    for fetch in (_search_html, _search_lite):
+    for name, fetch in _provider_chain():
         try:
             results = fetch(query, max_results)
             if results:
                 return json.dumps(
-                    {"success": True, "results": results, "query": query},
+                    {"success": True, "provider": name, "results": results, "query": query},
                     ensure_ascii=False,
                 )
         except Exception as e:
-            errors.append(f"{fetch.__name__}: {e}")
+            errors.append(f"{name}: {e}")
 
     return json.dumps(
         {
             "success": False,
-            "error": "; ".join(errors) or "no results from any endpoint",
+            "error": "; ".join(errors) or "no results from any provider",
             "results": [],
             "query": query,
         },
         ensure_ascii=False,
     )
+
+
+def _provider_chain() -> list[tuple[str, callable]]:
+    chain: list[tuple[str, callable]] = []
+    if os.environ.get("SERPER_API_KEY"):
+        chain.append(("serper", _search_serper))
+    if os.environ.get("YANDEX_SEARCH_API_KEY"):
+        chain.append(("yandex", _search_yandex))
+    chain.append(("ddg_html", _search_html))
+    chain.append(("ddg_lite", _search_lite))
+    return chain
+
+
+def _post_json(url: str, headers: dict, body: dict, timeout: int = 15) -> dict:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+# ── Serper (Google Search API) ────────────────────────────────
+
+
+def _search_serper(query: str, max_results: int) -> list[dict]:
+    has_cyrillic = bool(re.search(r"[а-яА-ЯёЁ]", query))
+    data = _post_json(
+        "https://google.serper.dev/search",
+        {"X-API-KEY": os.environ["SERPER_API_KEY"]},
+        {
+            "q": query,
+            "num": max_results,
+            "hl": "ru" if has_cyrillic else "en",
+            "gl": "ru" if has_cyrillic else "us",
+            "autocorrect": True,
+        },
+    )
+    results = []
+    # answerBox/knowledgeGraph carry a direct answer — surface it first
+    answer = (
+        data.get("answerBox", {}).get("answer")
+        or data.get("answerBox", {}).get("snippet")
+        or data.get("knowledgeGraph", {}).get("description")
+    )
+    if answer:
+        results.append({"title": "Прямой ответ Google", "url": "", "snippet": answer})
+    for item in data.get("organic", [])[:max_results]:
+        if item.get("link"):
+            results.append({
+                "title": item.get("title", ""),
+                "url": item["link"],
+                "snippet": item.get("snippet", ""),
+            })
+    return results
+
+
+# ── Yandex Search API (AI Studio) ─────────────────────────────
+
+
+def _search_yandex(query: str, max_results: int) -> list[dict]:
+    data = _post_json(
+        "https://searchapi.api.cloud.yandex.net/v2/web/search",
+        {"Authorization": f"Api-Key {os.environ['YANDEX_SEARCH_API_KEY']}"},
+        {
+            "query": {"searchType": "SEARCH_TYPE_RU", "queryText": query},
+            "responseFormat": "FORMAT_XML",
+        },
+        timeout=20,
+    )
+    raw_xml = base64.b64decode(data["rawData"]).decode("utf-8", errors="replace")
+    return _parse_yandex_xml(raw_xml, max_results)
+
+
+def _parse_yandex_xml(raw_xml: str, max_results: int) -> list[dict]:
+    matches = re.findall(
+        r"<doc[^>]*?>.*?<url>(.*?)</url>.*?<title>(.*?)</title>(?:.*?<headline>(.*?)</headline>)?",
+        raw_xml,
+        re.DOTALL,
+    )
+    results = []
+    for url, title, headline in matches[:max_results]:
+        title = _clean(title)
+        if title and url.startswith("http"):
+            results.append({"title": title, "url": url.strip(), "snippet": _clean(headline or "")})
+    return results
+
+
+# ── DuckDuckGo (без ключа) ────────────────────────────────────
 
 
 def _resolve_url(href: str) -> str:

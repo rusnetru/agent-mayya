@@ -2,8 +2,9 @@
 
 from typing import Any, Callable
 
-from src.tools.file_tools import list_dir, read_file, write_file
+from src.tools.file_tools import edit_file, list_dir, read_file, search_files, write_file
 from src.tools.python_exec import python_exec
+from src.tools.shell import run_command
 from src.tools.web_search import web_search
 from src.tools.web_extract import web_extract
 
@@ -63,7 +64,7 @@ class Tool:
 REGISTRY: dict[str, Tool] = {
     "web_search": Tool(
         name="web_search",
-        description="Search the web using DuckDuckGo. Returns JSON with results: title, url, snippet.",
+        description="Search the web (Serper/Google → Yandex → DuckDuckGo fallback chain). Returns JSON with results: title, url, snippet.",
         fn=web_search,
         parameters={
             "query": {"type": "string", "description": "search query string"},
@@ -98,6 +99,38 @@ REGISTRY: dict[str, Tool] = {
             "content": {"type": "string", "description": "text content to write"},
         },
     ),
+    "edit_file": Tool(
+        name="edit_file",
+        description="Edit a file by exact find-and-replace. `find` must occur exactly once in the file. Use instead of write_file for small changes.",
+        fn=edit_file,
+        parameters={
+            "path": {"type": "string", "description": "file path"},
+            "find": {"type": "string", "description": "exact text fragment to replace (must be unique in the file)"},
+            "replace": {"type": "string", "description": "replacement text"},
+        },
+    ),
+    "search_files": Tool(
+        name="search_files",
+        description="Search text files recursively by regex. Returns matches: file, line number, line text.",
+        fn=search_files,
+        parameters={
+            "pattern": {"type": "string", "description": "regex pattern (case-insensitive)"},
+            "path": {"type": "string", "description": "directory to search (default: current dir)"},
+            "max_results": {"type": "integer", "description": "max matches (default 50)"},
+        },
+        required=["pattern"],
+    ),
+    "run_command": Tool(
+        name="run_command",
+        description="Run a shell command (Windows cmd). Returns JSON with stdout/stderr/returncode. Use for git, pip, dir, running scripts. Timeout 60s (max 300).",
+        fn=run_command,
+        parameters={
+            "command": {"type": "string", "description": "shell command to execute"},
+            "cwd": {"type": "string", "description": "working directory (default: current)"},
+            "timeout": {"type": "integer", "description": "seconds before kill (default 60, max 300)"},
+        },
+        required=["command"],
+    ),
     "list_dir": Tool(
         name="list_dir",
         description="List files and directories in a path. Returns JSON.",
@@ -126,8 +159,9 @@ def get_all_tools() -> dict[str, Tool]:
     return dict(REGISTRY)
 
 
-def get_tool_schemas() -> list[dict[str, Any]]:
-    """Return OpenAI-compatible function calling schemas."""
+def get_tool_schemas(tools: dict[str, Tool] | None = None) -> list[dict[str, Any]]:
+    """Return OpenAI-compatible function calling schemas (for REGISTRY by default)."""
+    source = REGISTRY if tools is None else tools
     return [
         {
             "type": "function",
@@ -141,5 +175,5 @@ def get_tool_schemas() -> list[dict[str, Any]]:
                 },
             },
         }
-        for tool in REGISTRY.values()
+        for tool in source.values()
     ]

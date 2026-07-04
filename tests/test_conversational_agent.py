@@ -5,6 +5,11 @@ from src.memory.api import Memory
 
 
 class FakeTool:
+    name = "fake"
+    description = "fake tool"
+    parameters: dict = {}
+    required: list = []
+
     def __init__(self, result: str) -> None:
         self.result = result
         self.calls: list[dict] = []
@@ -128,3 +133,29 @@ def test_reset_clears_history():
     agent.chat("hi")
     agent.reset()
     assert agent.messages == []
+
+
+def test_remember_tool_added_with_memory_and_stores_fact():
+    memory = Memory(db_path=":memory:")
+    client = FakeClient([
+        {
+            "content": "",
+            "tool_calls": [
+                {"id": "r1", "name": "remember", "arguments": '{"fact": "Пользователя зовут Руслан"}'},
+            ],
+        },
+        {"content": "Запомнила!"},
+    ])
+    agent = ConversationalAgent(client, memory=memory, tools={})
+
+    assert "remember" in agent._tools
+    reply = agent.chat("запомни: меня зовут Руслан")
+
+    assert reply == "Запомнила!"
+    stored = [e.content for e in memory.episodic.all()]
+    assert any("Пользователя зовут Руслан" in s for s in stored)
+
+
+def test_no_remember_tool_without_memory():
+    agent = ConversationalAgent(FakeClient([]), tools={})
+    assert "remember" not in agent._tools

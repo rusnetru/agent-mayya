@@ -431,3 +431,37 @@ memory.forget(cutoff_timestamp)
 - 101/101 тестов (было 87, +14: test_conversational_agent.py, test_web_search.py)
 - Живой smoke-тест на реальном DeepSeek: запомнила имя, реально нашла в интернете и объяснила MCP, вспомнила имя из памяти, вычислила Фибоначчи через python_exec
 - Закрыты проблемы 1 (DDG), 2 (код при ошибке поиска), 3 (потеря контекста между сабагентами) из отчёта Hermes
+
+---
+
+## Фаза 12: Инструменты и навыки из Hermes — Завершена (Claude Fable 5)
+
+**Цель:** перенести в Mayya лучшее из установки Hermes Agent (`C:\Users\rusne\AppData\Local\hermes`), чтобы она решала задачи пользователя тем же арсеналом.
+
+Дата: 2026-07-04 | Исполнитель: Claude Fable 5
+
+### 12.1 Мульти-провайдерный веб-поиск (по образцу web-search-plus)
+
+- `web_search` — цепочка: **Serper (Google API) → Yandex Search API → DDG html → DDG lite**
+- Ключи SERPER_API_KEY и YANDEX_SEARCH_API_KEY скопированы из Hermes `.env` в наш `.env` (gitignored)
+- Serper проверен живьём (в т.ч. кириллица, answerBox → «Прямой ответ Google»)
+- Yandex-ключ сейчас даёт 401 (протух) — провайдер падает мягко, цепочка идёт дальше
+
+### 12.2 Новые инструменты (аналоги terminal/patch/search_files/memory из Hermes)
+
+- `run_command` (`src/tools/shell.py`) — shell-команды, timeout до 300с
+- `edit_file` — точечный find-and-replace, требует уникальности фрагмента
+- `search_files` — regex-поиск по текстовым файлам, скипает .venv/.git/__pycache__
+- `remember` — явное сохранение факта в долговременную память (создаётся в ConversationalAgent при наличии Memory)
+- `registry.py` — get_tool_schemas(tools) для кастомных наборов
+
+### 12.3 Система навыков (как у Hermes skills/)
+
+- `src/skills/loader.py` — навык = `skills/<name>/SKILL.md` (front matter + инструкции)
+- Список навыков (имя+описание) инжектится в system prompt; полный текст Mayya читает сама через read_file
+- Стартовые навыки: `web-research` (методика глубокого поиска), `self-development` (работа над собственным кодом: тесты, git, безопасность)
+
+### 12.4 Результат
+
+- 115/115 тестов (было 101, +14)
+- Живой прогон: сама посчитала py-файлы через терминал, запомнила факт, перечислила свои навыки из skills/

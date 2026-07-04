@@ -40,7 +40,7 @@ def build_status_table(client_model: str, memory_size: int) -> Table:
     t.add_column(style="bold cyan")
     t.add_row("LLM", client_model)
     t.add_row("Memory", f"{memory_size} episodes")
-    t.add_row("Tools", "web_search · file R/W · python_exec")
+    t.add_row("Tools", "web · files · terminal · python · memory")
     t.add_row("Session", time.strftime("%Y-%m-%d %H:%M"))
     if session_title:
         t.add_row("Title", session_title)
@@ -245,13 +245,17 @@ def cmd_usage(agent: EndToEndAgent) -> None:
 def cmd_tools() -> None:
     console.print(Panel(
         "[bold]Доступные инструменты[/]\n\n"
-        "  [cyan]web_search[/]   Поиск в интернете (DuckDuckGo)\n"
-        "  [cyan]web_extract[/]  Загрузка и чтение веб-страницы\n"
-        "  [cyan]read_file[/]    Чтение файла\n"
-        "  [cyan]write_file[/]   Запись в файл\n"
-        "  [cyan]list_dir[/]     Список файлов в директории\n"
-        "  [cyan]python_exec[/]  Выполнение Python-кода\n\n"
-        "[dim]Инструменты вызываются автоматически через LLM.[/]",
+        "  [cyan]web_search[/]    Поиск: Serper/Google → Yandex → DuckDuckGo\n"
+        "  [cyan]web_extract[/]   Загрузка и чтение веб-страницы\n"
+        "  [cyan]read_file[/]     Чтение файла\n"
+        "  [cyan]write_file[/]    Запись в файл\n"
+        "  [cyan]edit_file[/]     Точечная правка (find → replace)\n"
+        "  [cyan]search_files[/]  Поиск по файлам (regex)\n"
+        "  [cyan]list_dir[/]      Список файлов в директории\n"
+        "  [cyan]run_command[/]   Команда в терминале\n"
+        "  [cyan]python_exec[/]   Выполнение Python-кода\n"
+        "  [cyan]remember[/]      Запомнить факт в долговременную память\n\n"
+        "[dim]Плюс навыки в папке skills/ — Mayya читает их сама по задаче.[/]",
         title="[bold]Tools[/]", border_style="cyan"))
 
 
@@ -297,7 +301,7 @@ def main() -> None:
             "• Выполнять код на Python\n"
             "• Помнить контекст диалога\n"
             "• Самообучаться на успешных задачах\n\n"
-            "[dim]101 тест · DeepSeek · 4-уровневая память[/]",
+            "[dim]115 тестов · DeepSeek · 4-уровневая память[/]",
             title="[bold white]Mayya[/]",
             border_style="cyan"
         ))

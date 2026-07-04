@@ -38,7 +38,9 @@ class ConversationalAgent:
         if tools is None:
             from src.tools.registry import REGISTRY
             tools = REGISTRY
-        self._tools = tools
+        self._tools = dict(tools)
+        if memory is not None:
+            self._tools["remember"] = _make_remember_tool(memory)
         # Persistent history: only user/assistant text messages. Tool exchanges
         # live inside a single chat() call so history never has orphan tool ids.
         self.messages: list[dict] = []
@@ -68,7 +70,7 @@ class ConversationalAgent:
 
     def _tool_loop(self, turn: list[dict]) -> str:
         from src.tools.registry import get_tool_schemas
-        schemas = get_tool_schemas()
+        schemas = get_tool_schemas(self._tools)
 
         for _ in range(MAX_TOOL_STEPS):
             resp = self.client.complete_with_tools(
@@ -121,10 +123,15 @@ class ConversationalAgent:
             return f"Error: {e}"
 
     def _system_prompt(self, user_message: str) -> str:
+        from src.skills.loader import skills_prompt
+
         parts = [
             MAYYA_IDENTITY,
             f"СЕЙЧАС: {datetime.datetime.now():%Y-%m-%d %H:%M}, рабочая папка: {os.getcwd()}",
         ]
+        skills = skills_prompt()
+        if skills:
+            parts.append(skills)
         recalled = self._recall(user_message)
         if recalled:
             parts.append(
@@ -163,3 +170,31 @@ class ConversationalAgent:
             # never start history with an assistant message
             while self.messages and self.messages[0]["role"] != "user":
                 del self.messages[0]
+
+
+def _make_remember_tool(memory):
+    """Explicit long-term memory tool (аналог memory add из Hermes)."""
+    from src.tools.registry import Tool
+
+    def remember(fact: str) -> str:
+        try:
+            memory.store(
+                fact,
+                type="semantic",
+                context={"source": "remember_tool", "confidence": 0.9},
+            )
+            return json.dumps({"success": True, "stored": fact}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
+
+    return Tool(
+        name="remember",
+        description=(
+            "Сохранить важный факт в долговременную память (имя пользователя, "
+            "предпочтения, договорённости, важные детали проекта). "
+            "Вызывай, когда пользователь просит запомнить или сообщает то, "
+            "что пригодится в будущих сессиях."
+        ),
+        fn=remember,
+        parameters={"fact": {"type": "string", "description": "факт для запоминания, одним предложением"}},
+    )
