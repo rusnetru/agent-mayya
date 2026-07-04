@@ -308,7 +308,16 @@ mcp_ref: MCPManager | None = None
 
 # ── CRON RUNNER ─────────────────────────────────────────────
 
-def _cron_loop(client, tools: dict, stop: threading.Event) -> None:
+def _print_cron_result(job: dict, result: str) -> None:
+    console.print()
+    console.print(Panel(
+        result or "(no output)",
+        title=f"[bold yellow]⏰ Cron · {job['schedule']} · {job['task'][:50]}[/]",
+        border_style="yellow",
+    ))
+
+
+def _cron_loop(client, tools: dict, stop: threading.Event, notify) -> None:
     """Background thread: run due scheduled jobs through a dedicated agent."""
     store = CronStore()
     while not stop.wait(20):
@@ -320,18 +329,57 @@ def _cron_loop(client, tools: dict, stop: threading.Event) -> None:
             except Exception as e:
                 result = f"ERROR: {e}"
             store.mark_ran(job["id"], result)
-            console.print()
-            console.print(Panel(
-                result or "(no output)",
-                title=f"[bold yellow]⏰ Cron · {job['schedule']} · {job['task'][:50]}[/]",
-                border_style="yellow",
-            ))
+            try:
+                notify(job, result)
+            except Exception:
+                pass
 
 
-def start_cron_runner(client, tools: dict) -> threading.Event:
+def start_cron_runner(client, tools: dict, notify=_print_cron_result) -> threading.Event:
     stop = threading.Event()
-    threading.Thread(target=_cron_loop, args=(client, tools, stop), daemon=True).start()
+    threading.Thread(target=_cron_loop, args=(client, tools, stop, notify), daemon=True).start()
     return stop
+
+
+# ── TELEGRAM MODE ───────────────────────────────────────────
+
+def run_telegram_mode(agent: EndToEndAgent, client, all_tools: dict) -> None:
+    from src.channels.telegram import TelegramChannel, run_telegram_loop
+
+    try:
+        channel = TelegramChannel.from_env()
+        me = channel.get_me()
+    except Exception as e:
+        console.print(Panel(
+            f"[red]Telegram не настроен:[/] {e}\n\n"
+            "1. Создай бота у @BotFather → получи токен\n"
+            "2. В .env добавь:\n"
+            "   TELEGRAM_BOT_TOKEN=123456:ABC-...\n"
+            "   TELEGRAM_ALLOWED_USERS=<твой telegram id>\n"
+            "3. Запусти снова: python -m src.main --telegram\n\n"
+            "[dim]Токен бота Hermes переиспользовать нельзя — конфликт long polling.[/]",
+            title="[bold]Telegram setup[/]", border_style="red"))
+        return
+
+    conv = ConversationalAgent(client, memory=agent.memory, tools=all_tools)
+
+    def cron_notify(job: dict, result: str) -> None:
+        _print_cron_result(job, result)
+        if channel.last_chat_id is not None:
+            channel.send_message(channel.last_chat_id, f"⏰ {job['task'][:80]}\n\n{result}")
+
+    cron_stop = start_cron_runner(client, all_tools, notify=cron_notify)
+    console.print(Panel(
+        f"[bold]Mayya в Telegram:[/] @{me.get('username', '?')}\n"
+        f"Разрешённые пользователи: {', '.join(channel.allowed_users) or '[red]все (задай TELEGRAM_ALLOWED_USERS!)[/]'}\n"
+        "[dim]Ctrl+C — остановить[/]",
+        title="[bold]Telegram mode[/]", border_style="green"))
+    try:
+        run_telegram_loop(channel, conv, on_message=lambda s: console.print(f"[dim]{s}[/]"))
+    except KeyboardInterrupt:
+        pass
+    finally:
+        cron_stop.set()
 
 
 def main() -> None:
@@ -359,6 +407,19 @@ def main() -> None:
     from src.tools.registry import REGISTRY
     all_tools = {**REGISTRY, **mcp_ref.make_tools()}
 
+    # Telegram mode: serve chats instead of the terminal REPL
+    if "--telegram" in sys.argv:
+        if client is None:
+            console.print("[red]Telegram-режим требует DEEPSEEK_API_KEY[/]")
+            return
+        try:
+            run_telegram_mode(agent, client, all_tools)
+        finally:
+            if mcp_ref is not None:
+                mcp_ref.close()
+            agent.close()
+        return
+
     cron_stop = None
     if client is not None:
         conv_ref = ConversationalAgent(client, memory=agent.memory, tools=all_tools)
@@ -384,7 +445,7 @@ def main() -> None:
             "• Выполнять код на Python\n"
             "• Помнить контекст диалога\n"
             "• Самообучаться на успешных задачах\n\n"
-            "[dim]132 теста · DeepSeek · 4-уровневая память · MCP[/]",
+            "[dim]146 тестов · DeepSeek · 4-уровневая память · MCP · Telegram[/]",
             title="[bold white]Mayya[/]",
             border_style="cyan"
         ))

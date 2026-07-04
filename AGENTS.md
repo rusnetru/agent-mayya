@@ -4,7 +4,8 @@
 
 - `src/` — исходный код
 - `docs/` — документация
-- `tests/` — 132 теста (pytest)
+- `tests/` — 146 тестов (pytest)
+- `evals/` — сценарии качества (`python -m evals.run`)
 - `skills/` — навыки Mayya (SKILL.md, система как у Hermes)
 - `mcp.json` — MCP-серверы (playwright браузер, github); клиент в `src/mcp/client.py`
 

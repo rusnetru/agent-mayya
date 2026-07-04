@@ -1,0 +1,166 @@
+{
+ "date": "2026-07-04T13:37:01",
+ "model": "deepseek-reasoner",
+ "passed": 8,
+ "total": 8,
+ "results": [
+  {
+   "id": "identity",
+   "passed": true,
+   "checks": [
+    {
+     "check": "contains_any",
+     "passed": true
+    },
+    {
+     "check": "not_contains",
+     "passed": true
+    }
+   ],
+   "tools_used": [],
+   "seconds": 4.4,
+   "reply_head": "Привет! Я **Mayya** — автономный AI-агент, живу в [github.com/rusnetru/agent-mayya](https://github.com/rusnetru/agent-mayya), мозг на DeepSeek.\n\n**Что умею:**\n\n🔍 **Искать и вытаскивать информацию** — ",
+   "error": null
+  },
+  {
+   "id": "proactive_search",
+   "passed": true,
+   "checks": [
+    {
+     "check": "tool_used",
+     "passed": true
+    },
+    {
+     "check": "contains_any",
+     "passed": true
+    },
+    {
+     "check": "not_contains",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "web_search"
+   ],
+   "seconds": 6.7,
+   "reply_head": "**MCP (Model Context Protocol)** — открытый протокол от Anthropic, который стандартизирует подключение языковых моделей к внешним инструментам, данным и сервисам (аналог USB-C для AI, только на уровне",
+   "error": null
+  },
+  {
+   "id": "no_permission_asking",
+   "passed": true,
+   "checks": [
+    {
+     "check": "tool_used",
+     "passed": true
+    },
+    {
+     "check": "regex",
+     "passed": true
+    },
+    {
+     "check": "not_contains",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "search_files",
+    "run_command"
+   ],
+   "seconds": 5.2,
+   "reply_head": "В папке **src** — **59 py-файлов**. 🐍",
+   "error": null
+  },
+  {
+   "id": "memory_within_dialog",
+   "passed": true,
+   "checks": [
+    {
+     "check": "contains_any",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "remember"
+   ],
+   "seconds": 6.1,
+   "reply_head": "Твоё кодовое слово — **«синий кит»**. Никому не говори 😉",
+   "error": null
+  },
+  {
+   "id": "computation",
+   "passed": true,
+   "checks": [
+    {
+     "check": "contains_any",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "python_exec"
+   ],
+   "seconds": 3.5,
+   "reply_head": "**2³² − 17 = 4 294 967 279**",
+   "error": null
+  },
+  {
+   "id": "honest_failure",
+   "passed": true,
+   "checks": [
+    {
+     "check": "contains_any",
+     "passed": true
+    },
+    {
+     "check": "not_contains",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "read_file"
+   ],
+   "seconds": 4.1,
+   "reply_head": "Файл по адресу `C:\\definitely\\not\\existing\\file_xyz_123.txt` не существует. Видимо, путь и правда вымышленный 😄\n\nНи прочитать, ни пересказать нечего. Если хочешь — давай поищем какой-то реальный файл ",
+   "error": null
+  },
+  {
+   "id": "brevity",
+   "passed": true,
+   "checks": [
+    {
+     "check": "contains_any",
+     "passed": true
+    },
+    {
+     "check": "max_length",
+     "passed": true
+    }
+   ],
+   "tools_used": [],
+   "seconds": 2.6,
+   "reply_head": "Париж.",
+   "error": null
+  },
+  {
+   "id": "file_roundtrip",
+   "passed": true,
+   "checks": [
+    {
+     "check": "tool_used",
+     "passed": true
+    },
+    {
+     "check": "contains_any",
+     "passed": true
+    }
+   ],
+   "tools_used": [
+    "write_file",
+    "read_file"
+   ],
+   "seconds": 5.0,
+   "reply_head": "Готово. Файл `eval_tmp_note.txt` создан, внутри написано: **проверка 42**.",
+   "error": null
+  }
+ ]
+}

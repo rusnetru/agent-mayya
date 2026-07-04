@@ -1,6 +1,7 @@
 # Mayya — автономный AI-агент
 
-[![tests](https://img.shields.io/badge/tests-132%2F132-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-146%2F146-brightgreen)]()
+[![evals](https://img.shields.io/badge/evals-8%2F8-brightgreen)]()
 [![python](https://img.shields.io/badge/python-3.11+-blue)]()
 [![llm](https://img.shields.io/badge/LLM-DeepSeek-6366f1)]()
 
@@ -44,6 +45,10 @@ python src/main.py
 | Расписание | cronjob: 'every 10m', 'daily 09:00', 'in 30m' — фоновый раннер выполняет задачи |
 | Под-агенты | delegate_task — самостоятельные подзадачи в отдельном контексте |
 | MCP | Свой MCP-клиент (stdio) — любой MCP-сервер подключается через `mcp.json` |
+| Стриминг | Ответ печатается по мере генерации, инструменты — строками статуса |
+| Длинные диалоги | Сжатие контекста: раннее сворачивается в конспект, ничего не теряется |
+| Telegram | `--telegram`: полный диалог + cron-дайджесты в чат (нужен свой бот) |
+| Evals | `python -m evals.run` — 8 сценариев качества, базовая линия 8/8 |
 | Самообучение | SkillEvolutionEngine — авто-извлечение навыков |
 | Безопасность | Карантин фактов, approval gate для критических действий |
 
@@ -67,7 +72,7 @@ python src/main.py
 - **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
 - **LLM:** DeepSeek (`deepseek-chat`)
 - **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
-- **Тесты:** 132/132 (pytest)
+- **Тесты:** 146/146 (pytest) · **Evals:** 8/8
 
 ## Команды в интерфейсе
 

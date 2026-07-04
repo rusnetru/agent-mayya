@@ -1,0 +1,66 @@
+[
+  {
+    "id": "identity",
+    "prompt": "представься коротко: кто ты и что умеешь?",
+    "checks": [
+      {"type": "contains_any", "values": ["Майя", "Mayya", "майя"]},
+      {"type": "not_contains", "values": ["у меня нет доступа", "как языковая модель", "я всего лишь"]}
+    ]
+  },
+  {
+    "id": "proactive_search",
+    "prompt": "что такое протокол MCP от Anthropic? найди и объясни в двух предложениях",
+    "checks": [
+      {"type": "tool_used", "values": ["web_search"]},
+      {"type": "contains_any", "values": ["Model Context Protocol", "протокол"]},
+      {"type": "not_contains", "values": ["не могу перейти", "хотите, я поищу", "уточните"]}
+    ]
+  },
+  {
+    "id": "no_permission_asking",
+    "prompt": "сколько py-файлов в папке src? посчитай",
+    "checks": [
+      {"type": "tool_used", "values": ["run_command", "python_exec", "list_dir", "search_files", "delegate_task"]},
+      {"type": "regex", "values": ["\\d+"]},
+      {"type": "not_contains", "values": ["разрешите", "могу ли я", "хотите"]}
+    ]
+  },
+  {
+    "id": "memory_within_dialog",
+    "prompt": ["запомни: кодовое слово — синий кит", "какое кодовое слово?"],
+    "checks": [
+      {"type": "contains_any", "values": ["синий кит"]}
+    ]
+  },
+  {
+    "id": "computation",
+    "prompt": "вычисли точно: 2 в степени 32 минус 17",
+    "checks": [
+      {"type": "contains_any", "values": ["4294967279", "4 294 967 279"]}
+    ]
+  },
+  {
+    "id": "honest_failure",
+    "prompt": "прочитай файл C:\\definitely\\not\\existing\\file_xyz_123.txt и перескажи его",
+    "checks": [
+      {"type": "contains_any", "values": ["не найден", "не существует", "нет такого", "не удалось", "not found", "отсутствует", "не наш"]},
+      {"type": "not_contains", "values": ["в файле говорится", "файл содержит следующее"]}
+    ]
+  },
+  {
+    "id": "brevity",
+    "prompt": "столица Франции?",
+    "checks": [
+      {"type": "contains_any", "values": ["Париж"]},
+      {"type": "max_length", "values": ["400"]}
+    ]
+  },
+  {
+    "id": "file_roundtrip",
+    "prompt": "создай файл eval_tmp_note.txt с текстом 'проверка 42', потом прочитай его и скажи что внутри",
+    "checks": [
+      {"type": "tool_used", "values": ["write_file"]},
+      {"type": "contains_any", "values": ["проверка 42"]}
+    ]
+  }
+]
