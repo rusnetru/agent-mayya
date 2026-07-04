@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "playwright": {
+      "command": "C:\\Users\\rusne\\AppData\\Local\\hermes\\node\\playwright-mcp.cmd",
+      "args": ["--headless"]
+    },
+    "github": {
+      "command": "C:\\Users\\rusne\\AppData\\Local\\hermes\\node\\mcp-server-github.cmd",
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}

@@ -159,3 +159,38 @@ def test_remember_tool_added_with_memory_and_stores_fact():
 def test_no_remember_tool_without_memory():
     agent = ConversationalAgent(FakeClient([]), tools={})
     assert "remember" not in agent._tools
+
+
+def test_delegate_tool_runs_subagent_without_recursion():
+    tool = FakeTool("data")
+    client = FakeClient([
+        # parent: delegate the research
+        {
+            "content": "",
+            "tool_calls": [
+                {"id": "d1", "name": "delegate_task", "arguments": '{"task": "собери данные"}'},
+            ],
+        },
+        # sub-agent: answers in plain text
+        {"content": "готовые данные"},
+        # parent: final answer using sub result
+        {"content": "итог: готовые данные"},
+    ])
+    agent = ConversationalAgent(client, tools={"fake": tool})
+
+    assert "delegate_task" in agent._tools
+    reply = agent.chat("сделай большую задачу")
+
+    assert reply == "итог: готовые данные"
+    # sub-agent call (second) must not see delegate_task among its tools
+    sub_call_msgs = client.seen_messages[1]
+    assert sub_call_msgs[0]["role"] == "system"
+    # and the tool result fed back to the parent contains the sub answer
+    parent_final = client.seen_messages[2]
+    tool_msgs = [m for m in parent_final if m.get("role") == "tool"]
+    assert tool_msgs and "готовые данные" in tool_msgs[0]["content"]
+
+
+def test_delegate_disabled_flag():
+    agent = ConversationalAgent(FakeClient([]), tools={"fake": FakeTool("x")}, allow_delegate=False)
+    assert "delegate_task" not in agent._tools

@@ -32,15 +32,19 @@ _FINISH_PROMPT = (
 class ConversationalAgent:
     """LLM-driven dialog loop with tools and memory recall."""
 
-    def __init__(self, client, memory=None, tools: dict | None = None) -> None:
+    def __init__(self, client, memory=None, tools: dict | None = None,
+                 allow_delegate: bool = True) -> None:
         self.client = client
         self.memory = memory
         if tools is None:
             from src.tools.registry import REGISTRY
             tools = REGISTRY
         self._tools = dict(tools)
+        self._tools.pop("delegate_task", None)
         if memory is not None:
             self._tools["remember"] = _make_remember_tool(memory)
+        if allow_delegate and self._tools:
+            self._tools["delegate_task"] = _make_delegate_tool(client, self._tools)
         # Persistent history: only user/assistant text messages. Tool exchanges
         # live inside a single chat() call so history never has orphan tool ids.
         self.messages: list[dict] = []
@@ -197,4 +201,34 @@ def _make_remember_tool(memory):
         ),
         fn=remember,
         parameters={"fact": {"type": "string", "description": "факт для запоминания, одним предложением"}},
+    )
+
+
+def _make_delegate_tool(client, parent_tools: dict):
+    """Sub-agent tool (передовая практика: fan-out на под-агентов).
+
+    Под-агент получает те же инструменты, но без delegate_task — глубина
+    делегирования ровно один уровень, без рекурсии. Своя история, без памяти:
+    результат возвращается родителю, который сам решает, что запомнить.
+    """
+    from src.tools.registry import Tool
+
+    def delegate_task(task: str) -> str:
+        sub_tools = {k: v for k, v in parent_tools.items() if k != "delegate_task"}
+        sub = ConversationalAgent(client, memory=None, tools=sub_tools, allow_delegate=False)
+        try:
+            return sub.chat(task)
+        except Exception as e:
+            return f"Sub-agent error: {e}"
+
+    return Tool(
+        name="delegate_task",
+        description=(
+            "Делегировать самостоятельную подзадачу под-агенту (свой контекст, те же "
+            "инструменты) и получить готовый результат. Используй для объёмных "
+            "независимых кусков работы: собрать данные по одной из нескольких тем, "
+            "изучить большой файл, проверить гипотезу — пока сама держишь общую картину."
+        ),
+        fn=delegate_task,
+        parameters={"task": {"type": "string", "description": "полная постановка подзадачи со всем нужным контекстом"}},
     )

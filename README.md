@@ -1,6 +1,6 @@
 # Mayya — автономный AI-агент
 
-[![tests](https://img.shields.io/badge/tests-115%2F115-brightgreen)]()
+[![tests](https://img.shields.io/badge/tests-132%2F132-brightgreen)]()
 [![python](https://img.shields.io/badge/python-3.11+-blue)]()
 [![llm](https://img.shields.io/badge/LLM-DeepSeek-6366f1)]()
 
@@ -39,6 +39,11 @@ python src/main.py
 | Python | Выполнение кода в subprocess |
 | Память | 4 уровня: working → episodic → semantic → procedural + инструмент remember |
 | Навыки | Папка `skills/` со SKILL.md — Mayya читает их сама по задаче |
+| Браузер | Playwright MCP (headless Chrome): навигация, клики, формы, скриншоты |
+| GitHub | GitHub MCP: репозитории, коммиты, issues, PR |
+| Расписание | cronjob: 'every 10m', 'daily 09:00', 'in 30m' — фоновый раннер выполняет задачи |
+| Под-агенты | delegate_task — самостоятельные подзадачи в отдельном контексте |
+| MCP | Свой MCP-клиент (stdio) — любой MCP-сервер подключается через `mcp.json` |
 | Самообучение | SkillEvolutionEngine — авто-извлечение навыков |
 | Безопасность | Карантин фактов, approval gate для критических действий |
 
@@ -62,7 +67,7 @@ python src/main.py
 - **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
 - **LLM:** DeepSeek (`deepseek-chat`)
 - **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
-- **Тесты:** 115/115 (pytest)
+- **Тесты:** 132/132 (pytest)
 
 ## Команды в интерфейсе
 

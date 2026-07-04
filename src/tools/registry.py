@@ -2,6 +2,7 @@
 
 from typing import Any, Callable
 
+from src.tools.cron import cronjob
 from src.tools.file_tools import edit_file, list_dir, read_file, search_files, write_file
 from src.tools.python_exec import python_exec
 from src.tools.shell import run_command
@@ -139,6 +140,23 @@ REGISTRY: dict[str, Tool] = {
             "path": {"type": "string", "description": "directory path (default: current dir)"},
         },
         required=[],
+    ),
+    "cronjob": Tool(
+        name="cronjob",
+        description=(
+            "Manage scheduled jobs that run automatically. Actions: create (needs schedule+task), "
+            "list, remove (needs job_id). Schedule formats: 'every 10m', 'every 2h', 'daily 09:30', "
+            "'in 30m' (one-shot), 'once 2026-07-05 18:00' (one-shot). The task text is executed by "
+            "Mayya herself when due."
+        ),
+        fn=cronjob,
+        parameters={
+            "action": {"type": "string", "description": "create | list | remove"},
+            "schedule": {"type": "string", "description": "when to run (for create)"},
+            "task": {"type": "string", "description": "what to do, plain language (for create)"},
+            "job_id": {"type": "string", "description": "job id (for remove)"},
+        },
+        required=["action"],
     ),
     "python_exec": Tool(
         name="python_exec",

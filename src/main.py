@@ -15,8 +15,12 @@ from rich.spinner import Spinner
 from rich.text import Text
 from rich import box
 
+import threading
+
 from src.agent.conversational import ConversationalAgent
 from src.agent.end_to_end import EndToEndAgent
+from src.mcp.client import MCPManager
+from src.tools.cron import CronStore
 
 LOGO = r"""
  __  __
@@ -254,8 +258,11 @@ def cmd_tools() -> None:
         "  [cyan]list_dir[/]      Список файлов в директории\n"
         "  [cyan]run_command[/]   Команда в терминале\n"
         "  [cyan]python_exec[/]   Выполнение Python-кода\n"
-        "  [cyan]remember[/]      Запомнить факт в долговременную память\n\n"
-        "[dim]Плюс навыки в папке skills/ — Mayya читает их сама по задаче.[/]",
+        "  [cyan]remember[/]      Запомнить факт в долговременную память\n"
+        "  [cyan]cronjob[/]       Задачи по расписанию (every/daily/in/once)\n"
+        "  [cyan]delegate_task[/] Делегировать подзадачу под-агенту\n"
+        + (f"  [cyan]MCP[/]           {mcp_ref.status()}\n" if mcp_ref and mcp_ref.servers else "")
+        + "\n[dim]Плюс навыки в папке skills/ — Mayya читает их сама по задаче.[/]",
         title="[bold]Tools[/]", border_style="cyan"))
 
 
@@ -274,21 +281,64 @@ def cmd_model(args: str, agent: EndToEndAgent) -> None:
 agent_ref: EndToEndAgent = None  # type: ignore[assignment]
 conv_ref: ConversationalAgent | None = None
 model_ref: str = ""
+mcp_ref: MCPManager | None = None
+
+
+# ── CRON RUNNER ─────────────────────────────────────────────
+
+def _cron_loop(client, tools: dict, stop: threading.Event) -> None:
+    """Background thread: run due scheduled jobs through a dedicated agent."""
+    store = CronStore()
+    while not stop.wait(20):
+        for job in store.due():
+            try:
+                worker = ConversationalAgent(client, memory=agent_ref.memory if agent_ref else None,
+                                             tools=tools)
+                result = worker.chat(job["task"])
+            except Exception as e:
+                result = f"ERROR: {e}"
+            store.mark_ran(job["id"], result)
+            console.print()
+            console.print(Panel(
+                result or "(no output)",
+                title=f"[bold yellow]⏰ Cron · {job['schedule']} · {job['task'][:50]}[/]",
+                border_style="yellow",
+            ))
+
+
+def start_cron_runner(client, tools: dict) -> threading.Event:
+    stop = threading.Event()
+    threading.Thread(target=_cron_loop, args=(client, tools, stop), daemon=True).start()
+    return stop
 
 
 def main() -> None:
-    global agent_ref, conv_ref, model_ref
+    global agent_ref, conv_ref, model_ref, mcp_ref
     load_dotenv()
     use_llm = bool(os.environ.get("DEEPSEEK_API_KEY"))
 
     agent = EndToEndAgent(use_llm=use_llm)
     agent_ref = agent
     client = agent.orchestrator._llm
+
+    # MCP servers (mcp.json): browser, GitHub, etc.
+    mcp_ref = MCPManager()
+    mcp_ref.connect()
+    from src.tools.registry import REGISTRY
+    all_tools = {**REGISTRY, **mcp_ref.make_tools()}
+
+    cron_stop = None
     if client is not None:
-        conv_ref = ConversationalAgent(client, memory=agent.memory)
+        conv_ref = ConversationalAgent(client, memory=agent.memory, tools=all_tools)
+        cron_stop = start_cron_runner(client, all_tools)
     model = client.model if client else "stubs (offline)"
     model_ref = model
     print_header(agent, model)
+    if mcp_ref.servers or mcp_ref.errors:
+        console.print(f"  [dim]MCP: {mcp_ref.status()}[/]")
+    pending = len(CronStore().list())
+    if pending:
+        console.print(f"  [dim]Cron: {pending} задач(и) в расписании[/]")
 
     console.print("[dim]Введите сообщение или[/] [bold]/help[/] [dim]для списка команд[/]\n")
 
@@ -301,7 +351,7 @@ def main() -> None:
             "• Выполнять код на Python\n"
             "• Помнить контекст диалога\n"
             "• Самообучаться на успешных задачах\n\n"
-            "[dim]115 тестов · DeepSeek · 4-уровневая память[/]",
+            "[dim]132 теста · DeepSeek · 4-уровневая память · MCP[/]",
             title="[bold white]Mayya[/]",
             border_style="cyan"
         ))
@@ -359,6 +409,10 @@ def main() -> None:
 
     finally:
         console.print("\n[yellow]Saving...[/]", end="")
+        if cron_stop is not None:
+            cron_stop.set()
+        if mcp_ref is not None:
+            mcp_ref.close()
         summary = agent.close()
         console.print(f" [dim]done[/]")
 
