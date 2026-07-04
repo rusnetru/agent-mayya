@@ -19,5 +19,6 @@ dist/
 *.spec
 semantic_graph.json
 cron.json
+chroma_db/
 .playwright-mcp/
 mayya_chat_*.md

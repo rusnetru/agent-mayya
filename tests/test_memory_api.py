@@ -55,3 +55,27 @@ def test_working_memory_evicts_oldest_when_full():
     memory.store("second")
     memory.store("third")
     assert memory.working.as_list() == ["second", "third"]
+
+
+def test_custom_vector_index_is_wired_through():
+    class SpyIndex:
+        def __init__(self):
+            self.added, self.searched = [], []
+
+        def add(self, item_id, text):
+            self.added.append((item_id, text))
+
+        def remove(self, item_id):
+            pass
+
+        def search(self, query, top_k=5):
+            self.searched.append(query)
+            return [(self.added[0][0], 1.0)] if self.added else []
+
+    spy = SpyIndex()
+    memory = Memory(db_path=":memory:", vector_index=spy)
+    memory.store("меня зовут Руслан")
+    hits = memory.retrieve("как зовут пользователя")["episodic"]
+
+    assert spy.added and spy.searched  # index really used for store + retrieve
+    assert hits and hits[0].content == "меня зовут Руслан"

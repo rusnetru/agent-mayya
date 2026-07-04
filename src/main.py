@@ -77,27 +77,49 @@ def _extract_reply(transcript: list[str]) -> str:
 
 
 def run_task(agent: EndToEndAgent, task: str) -> None:
-    """Main dialog path: conversational agent loop (tools + memory).
+    """Main dialog path: conversational agent loop (tools + memory), streamed live.
     Falls back to the orchestrator pipeline when no LLM is configured."""
     global last_task, last_reply
 
-    with Live(Spinner("dots", text="[cyan]...[/]"), refresh_per_second=10, console=console):
+    if conv_ref is not None:
+        state = {"text_started": False}
+
+        def on_event(ev: dict) -> None:
+            if ev["type"] == "tool":
+                if state["text_started"]:
+                    console.print()
+                    state["text_started"] = False
+                console.print(f"[dim]⚙ {ev['name']} {ev.get('args', '')[:100]}[/]")
+            elif ev["type"] == "text" and ev["delta"]:
+                state["text_started"] = True
+                console.print(ev["delta"], end="", markup=False, highlight=False, soft_wrap=True)
+
+        console.print()
         try:
-            if conv_ref is not None:
-                reply = conv_ref.chat(task)
-            else:
+            reply = conv_ref.chat(task, on_event=on_event)
+        except Exception as e:
+            console.print(f"\n[red]ERROR: {e}[/]")
+            return
+        if state["text_started"]:
+            console.print("\n")
+        elif reply:  # ответ пришёл без стриминга (например, после fallback)
+            console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
+    else:
+        with Live(Spinner("dots", text="[cyan]...[/]"), refresh_per_second=10, console=console):
+            try:
                 result = agent.run(task)
                 reply = _extract_reply(result.orchestration.get("transcript", []))
-        except Exception as e:
-            console.print(f"[red]ERROR: {e}[/]")
-            return
+            except Exception as e:
+                console.print(f"[red]ERROR: {e}[/]")
+                return
+        if reply:
+            console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
 
     last_task = task
     if reply:
         chat_history.append(f"User: {task}")
         chat_history.append(f"Mayya: {reply}")
         last_reply = reply
-        console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
     else:
         console.print("[dim](no response)[/]")
 
@@ -317,7 +339,17 @@ def main() -> None:
     load_dotenv()
     use_llm = bool(os.environ.get("DEEPSEEK_API_KEY"))
 
-    agent = EndToEndAgent(use_llm=use_llm)
+    # Semantic memory: real embeddings via ChromaDB when available (fallback: hash index)
+    vector_index = None
+    memory_kind = "hash-index"
+    try:
+        from src.memory.chroma_index import ChromaVectorIndex
+        vector_index = ChromaVectorIndex(persist_dir="chroma_db")
+        memory_kind = "ChromaDB embeddings"
+    except Exception as e:
+        console.print(f"  [dim yellow]ChromaDB недоступен ({str(e)[:60]}) — память на hash-индексе[/]")
+
+    agent = EndToEndAgent(use_llm=use_llm, vector_index=vector_index)
     agent_ref = agent
     client = agent.orchestrator._llm
 
@@ -336,6 +368,7 @@ def main() -> None:
     print_header(agent, model)
     if mcp_ref.servers or mcp_ref.errors:
         console.print(f"  [dim]MCP: {mcp_ref.status()}[/]")
+    console.print(f"  [dim]Memory: {memory_kind}[/]")
     pending = len(CronStore().list())
     if pending:
         console.print(f"  [dim]Cron: {pending} задач(и) в расписании[/]")

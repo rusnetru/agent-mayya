@@ -53,9 +53,10 @@ class EndToEndAgent:
         memory: Memory | None = None,
         use_llm: bool = False,
         llm_client: LLMClient | None = None,
+        vector_index=None,
     ) -> None:
         guard = MemorySafetyGuard(SemanticGraph(), min_confidence=0.4)  # will be wired to memory's semantic
-        self.memory = memory or Memory(db_path="memory.db", safety_guard=guard)
+        self.memory = memory or Memory(db_path="memory.db", safety_guard=guard, vector_index=vector_index)
         guard.semantic = self.memory.semantic  # wire to the real semantic graph
         self.goals = GoalStack()
         self.tracer = Tracer()

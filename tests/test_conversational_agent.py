@@ -22,13 +22,19 @@ class FakeTool:
 class FakeClient:
     """Scripted client: pops one response per complete_with_tools call."""
 
-    def __init__(self, responses: list[dict]) -> None:
+    def __init__(self, responses: list[dict], summary: str = "конспект: ...") -> None:
         self.responses = list(responses)
         self.seen_messages: list[list[dict]] = []
+        self.summary = summary
+        self.complete_calls: list[tuple[str, str]] = []
 
     def complete_with_tools(self, system_prompt, user_message, tools, temperature=0.3, messages=None):
         self.seen_messages.append(list(messages or []))
         return self.responses.pop(0) if self.responses else {"content": "готово"}
+
+    def complete(self, system_prompt, user_message, temperature=0.3):
+        self.complete_calls.append((system_prompt, user_message))
+        return self.summary
 
 
 def test_plain_text_reply_and_history():
@@ -125,6 +131,50 @@ def test_history_trimmed_and_starts_with_user():
 
     assert len(agent.messages) <= MAX_HISTORY_MESSAGES
     assert agent.messages[0]["role"] == "user"
+
+
+def test_compaction_builds_summary_and_injects_it():
+    client = FakeClient(
+        [{"content": f"r{i}"} for i in range(40)],
+        summary="Пользователь — Руслан, обсуждали план запуска.",
+    )
+    agent = ConversationalAgent(client, tools={})
+
+    for i in range(20):  # 40 messages -> compaction fires
+        agent.chat(f"msg {i}")
+
+    assert agent.summary == "Пользователь — Руслан, обсуждали план запуска."
+    # evicted messages went into the summarizer
+    assert client.complete_calls, "summarizer was never called"
+    sys_prompt, evicted_text = client.complete_calls[0]
+    assert "конспект" in sys_prompt.lower()
+    assert "msg 0" in evicted_text
+    # summary is injected into the next turn's system prompt
+    agent.chat("ещё")
+    system = client.seen_messages[-1][0]["content"]
+    assert "Руслан" in system
+
+
+def test_summarizer_failure_keeps_old_summary():
+    class NoCompleteClient(FakeClient):
+        def complete(self, *a, **k):
+            raise RuntimeError("LLM down")
+
+    client = NoCompleteClient([{"content": f"r{i}"} for i in range(40)])
+    agent = ConversationalAgent(client, tools={})
+    agent.summary = "старый конспект"
+
+    for i in range(20):
+        agent.chat(f"msg {i}")
+
+    assert agent.summary == "старый конспект"  # not lost, dialog not broken
+
+
+def test_reset_clears_summary():
+    agent = ConversationalAgent(FakeClient([{"content": "a"}]), tools={})
+    agent.summary = "x"
+    agent.reset()
+    assert agent.summary == ""
 
 
 def test_reset_clears_history():

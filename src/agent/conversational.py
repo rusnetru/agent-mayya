@@ -19,9 +19,18 @@ import os
 from src.llm.personality import MAYYA_IDENTITY
 
 MAX_TOOL_STEPS = 12          # tool-calling iterations per user message
-MAX_HISTORY_MESSAGES = 30    # persistent user/assistant messages kept
+MAX_HISTORY_MESSAGES = 30    # threshold that triggers compaction
+KEEP_RECENT_MESSAGES = 20    # verbatim tail kept after compaction
+SUMMARY_CHAR_LIMIT = 1500    # ceiling for the rolling dialog summary
 TOOL_RESULT_LIMIT = 10_000   # chars of a tool result fed back to the model
 MEMORY_RECALL_TOP_K = 3
+
+_SUMMARIZE_PROMPT = (
+    "Ты сжимаешь начало длинного диалога в конспект для самой себя. Сохрани: имена и факты "
+    "о пользователе, принятые решения, договорённости, незакрытые задачи, важные результаты "
+    "инструментов. Убери: приветствия, воду, дословные цитаты. Пиши плотно, по-русски, "
+    f"не длиннее {SUMMARY_CHAR_LIMIT} символов. Верни ТОЛЬКО конспект."
+)
 
 _FINISH_PROMPT = (
     "Хватит вызывать инструменты. Дай итоговый ответ пользователю на основе того, "
@@ -48,11 +57,18 @@ class ConversationalAgent:
         # Persistent history: only user/assistant text messages. Tool exchanges
         # live inside a single chat() call so history never has orphan tool ids.
         self.messages: list[dict] = []
+        # Rolling summary of compacted (evicted) early history — see _trim_history.
+        self.summary: str = ""
 
     # ── public API ────────────────────────────────────────────
 
-    def chat(self, user_message: str) -> str:
-        """Run one dialog turn: recall memory, loop tools, remember the exchange."""
+    def chat(self, user_message: str, on_event=None) -> str:
+        """Run one dialog turn: recall memory, loop tools, remember the exchange.
+
+        on_event (optional) receives live events:
+          {"type": "text", "delta": str}   — фрагмент текста ответа (стриминг)
+          {"type": "tool", "name": str, "args": str} — вызов инструмента
+        """
         self.messages.append({"role": "user", "content": user_message})
 
         turn: list[dict] = [
@@ -60,7 +76,7 @@ class ConversationalAgent:
             *self.messages,
         ]
 
-        reply = self._tool_loop(turn)
+        reply = self._tool_loop(turn, on_event)
 
         self.messages.append({"role": "assistant", "content": reply})
         self._trim_history()
@@ -69,17 +85,16 @@ class ConversationalAgent:
 
     def reset(self) -> None:
         self.messages.clear()
+        self.summary = ""
 
     # ── internals ─────────────────────────────────────────────
 
-    def _tool_loop(self, turn: list[dict]) -> str:
+    def _tool_loop(self, turn: list[dict], on_event=None) -> str:
         from src.tools.registry import get_tool_schemas
         schemas = get_tool_schemas(self._tools)
 
         for _ in range(MAX_TOOL_STEPS):
-            resp = self.client.complete_with_tools(
-                system_prompt="", user_message="", tools=schemas, messages=turn,
-            )
+            resp = self._complete(turn, schemas, on_event)
             tool_calls = resp.get("tool_calls")
             if not tool_calls:
                 return resp.get("content", "")
@@ -97,6 +112,8 @@ class ConversationalAgent:
                 ],
             })
             for tc in tool_calls:
+                if on_event is not None:
+                    on_event({"type": "tool", "name": tc["name"], "args": tc.get("arguments", "")})
                 turn.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
@@ -105,10 +122,19 @@ class ConversationalAgent:
 
         # Step budget exhausted — force a text answer from what was gathered.
         turn.append({"role": "user", "content": _FINISH_PROMPT})
-        resp = self.client.complete_with_tools(
-            system_prompt="", user_message="", tools=schemas, messages=turn,
-        )
+        resp = self._complete(turn, schemas, on_event)
         return resp.get("content", "")
+
+    def _complete(self, turn: list[dict], schemas: list[dict], on_event=None) -> dict:
+        """One LLM call; streams text deltas to on_event when the client supports it."""
+        if on_event is None:
+            return self.client.complete_with_tools(
+                system_prompt="", user_message="", tools=schemas, messages=turn,
+            )
+        return self.client.complete_with_tools(
+            system_prompt="", user_message="", tools=schemas, messages=turn,
+            on_delta=lambda text: on_event({"type": "text", "delta": text}),
+        )
 
     def _execute(self, tool_call: dict) -> str:
         name = tool_call["name"]
@@ -136,6 +162,8 @@ class ConversationalAgent:
         skills = skills_prompt()
         if skills:
             parts.append(skills)
+        if self.summary:
+            parts.append("КОНСПЕКТ РАННЕЙ ЧАСТИ ЭТОГО ДИАЛОГА (сжато, факты верны):\n" + self.summary)
         recalled = self._recall(user_message)
         if recalled:
             parts.append(
@@ -169,11 +197,30 @@ class ConversationalAgent:
             pass  # memory failures must never break the dialog
 
     def _trim_history(self) -> None:
-        if len(self.messages) > MAX_HISTORY_MESSAGES:
-            del self.messages[: len(self.messages) - MAX_HISTORY_MESSAGES]
-            # never start history with an assistant message
-            while self.messages and self.messages[0]["role"] != "user":
-                del self.messages[0]
+        """Compaction: fold evicted early messages into a rolling summary
+        instead of dropping them, so long dialogs keep their beginning."""
+        if len(self.messages) <= MAX_HISTORY_MESSAGES:
+            return
+        evicted = self.messages[:-KEEP_RECENT_MESSAGES]
+        self.messages = self.messages[-KEEP_RECENT_MESSAGES:]
+        # keep the verbatim tail starting on a user message
+        while self.messages and self.messages[0]["role"] != "user":
+            evicted.append(self.messages.pop(0))
+        try:
+            self.summary = self._summarize(evicted)
+        except Exception:
+            pass  # keep the previous summary — losing it is worse than staleness
+
+    def _summarize(self, evicted: list[dict]) -> str:
+        lines = []
+        if self.summary:
+            lines.append(f"Прежний конспект:\n{self.summary}\n")
+        lines.append("Новые сообщения для сворачивания:")
+        for m in evicted:
+            role = "User" if m["role"] == "user" else "Mayya"
+            lines.append(f"{role}: {m.get('content', '')[:500]}")
+        result = self.client.complete(_SUMMARIZE_PROMPT, "\n".join(lines))
+        return result.strip()[:SUMMARY_CHAR_LIMIT]
 
 
 def _make_remember_tool(memory):
