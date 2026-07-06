@@ -37,6 +37,10 @@ session_title: str = ""
 last_task: str = ""
 last_reply: str = ""
 
+# Visual style for Mayya's responses in chat
+MAYYA_STYLE = "bold white"
+MAYYA_BORDER = "dark_goldenrod"
+
 
 def build_status_table(client_model: str, memory_size: int) -> Table:
     t = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
@@ -92,9 +96,9 @@ def run_task(agent: EndToEndAgent, task: str) -> None:
                 console.print(f"[dim]⚙ {ev['name']} {ev.get('args', '')[:100]}[/]")
             elif ev["type"] == "text" and ev["delta"]:
                 state["text_started"] = True
-                console.print(ev["delta"], end="", markup=False, highlight=False, soft_wrap=True)
+                console.print(ev["delta"], end="", style=MAYYA_STYLE, markup=False, highlight=False, soft_wrap=True)
 
-        console.print()
+        console.print(f"[dim]────────────────────────────────────────────────────────────[/]")
         try:
             reply = conv_ref.chat(task, on_event=on_event)
         except Exception as e:
@@ -103,7 +107,8 @@ def run_task(agent: EndToEndAgent, task: str) -> None:
         if state["text_started"]:
             console.print("\n")
         elif reply:  # ответ пришёл без стриминга (например, после fallback)
-            console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
+            console.print(f"[dim]────────────────────────────────────────────────────────────[/]")
+            console.print(Panel(reply, title=f"[{MAYYA_STYLE}]Mayya[/]", border_style=MAYYA_BORDER))
     else:
         with Live(Spinner("dots", text="[cyan]...[/]"), refresh_per_second=10, console=console):
             try:
@@ -113,7 +118,8 @@ def run_task(agent: EndToEndAgent, task: str) -> None:
                 console.print(f"[red]ERROR: {e}[/]")
                 return
         if reply:
-            console.print(Panel(reply, title="[bold white]Mayya[/]", border_style="cyan"))
+            console.print(f"[dim]────────────────────────────────────────────────────────────[/]")
+            console.print(Panel(reply, title=f"[{MAYYA_STYLE}]Mayya[/]", border_style=MAYYA_BORDER))
 
     last_task = task
     if reply:
@@ -142,10 +148,11 @@ def run_pipeline_task(agent: EndToEndAgent, task: str) -> None:
         chat_history.append(f"Mayya: {reply}")
         last_reply = reply
     status = "[green]verified[/]" if result.succeeded else "[yellow]not verified[/]"
+    console.print(f"[dim]────────────────────────────────────────────────────────────[/]")
     console.print(Panel(
         reply or "(no output)",
-        title=f"[bold white]Mayya · pipeline · {status}[/]",
-        border_style="cyan",
+        title=f"[{MAYYA_STYLE}]Mayya · pipeline · {status}[/]",
+        border_style=MAYYA_BORDER,
     ))
 
 
