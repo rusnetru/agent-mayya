@@ -22,3 +22,4 @@ cron.json
 chroma_db/
 .playwright-mcp/
 mayya_chat_*.md
+cortex_state.json

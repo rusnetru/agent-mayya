@@ -17,13 +17,14 @@ import json
 import os
 
 from src.llm.personality import MAYYA_IDENTITY
+from src.cortex.cortex import get_cortex
 
 MAX_TOOL_STEPS = 12          # tool-calling iterations per user message
 MAX_HISTORY_MESSAGES = 30    # threshold that triggers compaction
 KEEP_RECENT_MESSAGES = 20    # verbatim tail kept after compaction
 SUMMARY_CHAR_LIMIT = 1500    # ceiling for the rolling dialog summary
-TOOL_RESULT_LIMIT = 10_000   # chars of a tool result fed back to the model
-MEMORY_RECALL_TOP_K = 3
+TOOL_RESULT_LIMIT = 4_000    # chars of a tool result fed back to the model
+MEMORY_RECALL_TOP_K = 2
 
 _SUMMARIZE_PROMPT = (
     "Ты сжимаешь начало длинного диалога в конспект для самой себя. Сохрани: имена и факты "
@@ -42,9 +43,10 @@ class ConversationalAgent:
     """LLM-driven dialog loop with tools and memory recall."""
 
     def __init__(self, client, memory=None, tools: dict | None = None,
-                 allow_delegate: bool = True) -> None:
+                 allow_delegate: bool = True, cortex=None) -> None:
         self.client = client
         self.memory = memory
+        self.cortex = cortex if cortex is not None else get_cortex()
         if tools is None:
             from src.tools.registry import REGISTRY
             tools = REGISTRY
@@ -78,6 +80,7 @@ class ConversationalAgent:
 
         reply = self._tool_loop(turn, on_event)
 
+        self.cortex.update(user_message, reply)
         self.messages.append({"role": "assistant", "content": reply})
         self._trim_history()
         self._remember(user_message, reply)
@@ -157,6 +160,7 @@ class ConversationalAgent:
 
         parts = [
             MAYYA_IDENTITY,
+            self.cortex.control_signal(),
             f"СЕЙЧАС: {datetime.datetime.now():%Y-%m-%d %H:%M}, рабочая папка: {os.getcwd()}",
         ]
         skills = skills_prompt()
@@ -182,7 +186,7 @@ class ConversationalAgent:
         for ep in episodes:
             content = getattr(ep, "content", str(ep)).strip()
             if content:
-                lines.append(f"- {content[:300]}")
+                lines.append(f"- {content[:200]}")
         return "\n".join(lines)
 
     def _remember(self, user_message: str, reply: str) -> None:

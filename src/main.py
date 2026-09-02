@@ -299,10 +299,36 @@ def cmd_model(args: str, agent: EndToEndAgent) -> None:
     current = agent.orchestrator._llm.model if agent.orchestrator._llm else "stubs"
     if not args.strip():
         console.print(f"[bold]Текущая модель:[/] [cyan]{current}[/]")
-        console.print("[dim]Доступные: deepseek-chat, deepseek-reasoner[/]")
-        console.print("[dim]Смена: /model deepseek-chat[/]")
+        console.print("[dim]Доступные: deepseek-v4-flash, deepseek-v4-pro[/]")
+        console.print("[dim]Смена: /model deepseek-v4-flash[/]")
         return
     console.print(f"[yellow]Смена модели требует перезапуска. Текущая: {current}[/]")
+
+
+def cmd_cortex(args: str) -> None:
+    """Показать или сбросить внутреннее состояние коры (аффективный слой)."""
+    from src.cortex.cortex import get_cortex
+
+    cortex = get_cortex()
+    if args.strip().lower() in ("reset", "сброс"):
+        cortex.reset()
+        console.print("[yellow]Кора сброшена в исходное состояние.[/]")
+        return
+    s = cortex.state
+    aff = s["affect"]
+    rel = s["relationship"]
+    mot = s["motivation"]
+    sm = s["self_model"]
+    goal = f"\n  Цель:          {mot['active_goal']}" if mot["active_goal"] else ""
+    console.print(Panel(
+        f"[bold]Состояние коры[/] (ходов: {s['turn_count']})\n"
+        f"  Настроение:    {sm['mood']}  [{sm['note']}]\n"
+        f"  Аффект:        valence={aff['valence']:+.2f} arousal={aff['arousal']:+.2f} dominance={aff['dominance']:+.2f}\n"
+        f"  Отношение:     affinity={rel['affinity']:+.2f} trust={rel['trust']:.2f}\n"
+        f"  Мотивация:     drive={mot['drive']:.2f} energy={mot['energy']:.2f}"
+        f"{goal}\n"
+        f"  Обновлено:     {s['updated_at'] or '(нет)'}",
+        title="[bold]Cortex[/]", border_style="magenta"))
 
 
 # ── GLOBALS FOR COMMANDS ────────────────────────────────────
@@ -505,6 +531,8 @@ def main() -> None:
                     run_pipeline_task(agent, args.strip())
                 else:
                     console.print("[dim]Использование: /task <задача>[/]")
+            elif name == "/cortex":
+                cmd_cortex(args)
             else:
                 run_task(agent, task)
 
