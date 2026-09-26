@@ -70,7 +70,7 @@ python src/main.py
 ```
 
 - **Память:** SQLite + ChromaDB (embeddings) + NetworkX (semantic graph)
-- **LLM:** DeepSeek (`deepseek-chat`)
+- **LLM:** DeepSeek (`deepseek-flash`, V4.1-Flash)
 - **Интерфейс:** Rich-терминал (цвета, панели, спиннер)
 - **Тесты:** 146/146 (pytest) · **Evals:** 8/8
 

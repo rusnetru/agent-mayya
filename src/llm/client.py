@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-v4-pro"
+DEFAULT_MODEL = "deepseek-flash"
 
 
 class LLMClient:
@@ -22,7 +22,7 @@ class LLMClient:
         self,
         api_key: str | None = None,
         base_url: str = DEEPSEEK_BASE_URL,
-        model: str = DEFAULT_MODEL,
+        model: str | None = None,
     ) -> None:
         load_dotenv()
         resolved_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
@@ -30,7 +30,8 @@ class LLMClient:
             raise RuntimeError(
                 "DEEPSEEK_API_KEY not set — put it in .env or pass api_key explicitly"
             )
-        self.model = model
+        # Model is overridable via DEEPSEEK_MODEL (e.g. deepseek-flash); falls back to DEFAULT_MODEL.
+        self.model = model or os.environ.get("DEEPSEEK_MODEL") or DEFAULT_MODEL
         self._client = OpenAI(api_key=resolved_key, base_url=base_url)
 
     def complete(self, system_prompt: str, user_message: str, temperature: float = 0.3) -> str:
